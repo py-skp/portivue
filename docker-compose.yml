@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: finlytics_db
+    env_file:
+      - ./.env.db
+    ports:
+      - "5432:5432" # optional, only if you want to connect from host DB tools
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [appnet]
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: finlytics_api
+    env_file:
+      - ./.env.backend.local
+      - ./.env.db   # to pick up POSTGRES_PASSWORD used in DATABASE_URL
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    networks: [appnet]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: finlytics_web
+    env_file:
+      - ./.env.frontend.local
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    networks: [appnet]
+
+volumes:
+  pgdata:
+
+networks:
+  appnet:
+    driver: bridge

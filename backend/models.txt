@@ -1,0 +1,40 @@
+# backend/models.py
+from typing import Optional
+from sqlmodel import SQLModel, Field, Relationship
+from datetime import datetime
+
+class Currency(SQLModel, table=True):
+    code: str = Field(primary_key=True, max_length=10)   # e.g., USD
+    name: Optional[str] = None
+
+class AssetClass(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str                                         # e.g., Equity, ETF, Bond, Crypto, Cash
+
+class Account(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str                                         # e.g., Trading212-GBP
+    currency_code: str = Field(foreign_key="currency.code")
+
+class MarketInstrument(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str                                         # Apple Inc.
+    symbol: str | None = None                         # AAPL
+    isin: str | None = None                           # US0378331005
+    exchange: str | None = None                       # NASDAQ
+    currency_code: str | None = Field(default=None, foreign_key="currency.code")
+    asset_class_id: int | None = Field(default=None, foreign_key="assetclass.id")
+    provider: str | None = None                       # yahoo/coingecko/manual
+    provider_ref: str | None = None                   # e.g., yahoo symbol or cg id
+
+class Activity(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    type: str                                         # Buy/Sell/Dividend/Interest/Fee
+    account_id: int = Field(foreign_key="account.id")
+    instrument_id: int | None = Field(default=None, foreign_key="marketinstrument.id")
+    date: datetime
+    quantity: float | None = None
+    unit_price: float | None = None
+    fee: float | None = 0.0
+    note: str | None = None
+    currency_code: str = Field(foreign_key="currency.code")

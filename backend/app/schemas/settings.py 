@@ -1,0 +1,10 @@
+from __future__ import annotations
+from pydantic import BaseModel
+from typing import Optional
+
+class AppSettingRead(BaseModel):
+    id: int
+    base_currency_code: Optional[str] = None
+
+class AppSettingUpdate(BaseModel):
+    base_currency_code: Optional[str] = None

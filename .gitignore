@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+*.sqlite*
+
+# Node
+node_modules/
+.next/
+out/
+*.log
+
+# Docker
+*.pid
+*.tar
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
