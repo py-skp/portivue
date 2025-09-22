@@ -1,10 +1,21 @@
 "use client";
+
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { useAccounts, useAssetClasses, useCurrencies } from "@/features/lookups/hooks";
+import {
+  useAccounts,
+  useAssetClasses,
+  useCurrencies,
+} from "@/features/lookups/hooks";
 import InstrumentSearch from "@/features/instruments/InstrumentSearch";
-import { postJSON } from "@/app/api";
+import { post } from "@/lib/api";
 
+// ---- Local types for lookups ----
+type Account = { id: number; name: string };
+type AssetClass = { id: number; name: string };
+type Currency = { code: string };
+
+// ---- Form types ----
 type FormValues = {
   type: "Buy" | "Sell" | "Dividend" | "Interest" | "Fee";
   account_id: number;
@@ -13,33 +24,71 @@ type FormValues = {
   instrument_search: string;
   date: string;
   quantity?: number;
-  unit_price?: number;
+  unit_price?: number; // also "amount" for non-trades
   currency_code: string;
   fee?: number;
   note?: string;
 };
 
+type ActivitySaved = { id: number };
+
 export default function ActivityForm() {
-  const { register, handleSubmit, setValue, watch, formState:{isSubmitting} } =
-    useForm<FormValues>({ defaultValues:{ type:"Buy", fee:0, date:new Date().toISOString().slice(0,10) } });
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { isSubmitting },
+  } = useForm<FormValues>({
+    defaultValues: {
+      type: "Buy",
+      fee: 0,
+      date: new Date().toISOString().slice(0, 10),
+      instrument_search: "",
+    },
+  });
 
-  const { data: currencies }   = useCurrencies();
-  const { data: assetClasses } = useAssetClasses();
-  const { data: accounts }     = useAccounts();
+  // Lookups (hooks without generics)
+  const { data: currenciesData } = useCurrencies();
+  const { data: assetClassesData } = useAssetClasses();
+  const { data: accountsData } = useAccounts();
 
+  // Narrow shapes used by this form
+  const currencies = (currenciesData ?? []) as Currency[];
+  const assetClasses = (assetClassesData ?? []) as AssetClass[];
+  const accounts = (accountsData ?? []) as Account[];
+
+  // Prefill first options on load (safe with noUncheckedIndexedAccess)
   useEffect(() => {
-    if (currencies?.length) setValue("currency_code", currencies[0].code);
-    if (accounts?.length) setValue("account_id", accounts[0].id);
-  }, [currencies, accounts, setValue]);
+    const currentCcy = watch("currency_code");
+    if (!currentCcy) {
+      const firstCode = currencies[0]?.code;
+      if (firstCode) setValue("currency_code", firstCode);
+    }
+
+    const currentAcc = watch("account_id");
+    if (!currentAcc) {
+      const firstAccId = accounts[0]?.id;
+      if (typeof firstAccId === "number") setValue("account_id", firstAccId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currencies, accounts]);
 
   const type = watch("type");
   const requires = type === "Buy" || type === "Sell";
   const assetClassId = watch("asset_class_id");
 
-  async function onSubmit(v: FormValues){
-    if (!v.instrument_id) return alert("Pick an instrument");
-    if (requires && (!v.quantity || !v.unit_price)) return alert("Quantity & Unit Price required");
-    const saved = await postJSON("/activities", v);
+  async function onSubmit(v: FormValues) {
+    if (!v.instrument_id) {
+      alert("Pick an instrument");
+      return;
+    }
+    if (requires && (!v.quantity || !v.unit_price)) {
+      alert("Quantity & Unit Price required for Buy/Sell");
+      return;
+    }
+
+    const saved = await post<ActivitySaved>("/activities", v);
     alert(`Saved #${saved.id}`);
   }
 
@@ -48,61 +97,112 @@ export default function ActivityForm() {
       {/* Type */}
       <label className="block">
         <div className="text-sm">Type*</div>
-        <select {...register("type", { required:true })} className="w-full rounded border p-2">
-          {["Buy","Sell","Dividend","Interest","Fee"].map(t => <option key={t} value={t}>{t}</option>)}
+        <select
+          {...register("type", { required: true })}
+          className="w-full rounded border p-2"
+        >
+          {["Buy", "Sell", "Dividend", "Interest", "Fee"].map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
         </select>
       </label>
 
       {/* Account */}
       <label className="block">
         <div className="text-sm">Account*</div>
-        <select {...register("account_id", { required:true, valueAsNumber:true })} className="w-full rounded border p-2">
-          {(accounts ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        <select
+          {...register("account_id", { required: true, valueAsNumber: true })}
+          className="w-full rounded border p-2"
+        >
+          {accounts.map((a: Account) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
         </select>
       </label>
 
       {/* Asset Class */}
       <label className="block">
         <div className="text-sm">Asset Class</div>
-        <select {...register("asset_class_id", { valueAsNumber:true })} className="w-full rounded border p-2">
+        <select
+          {...register("asset_class_id", { valueAsNumber: true })}
+          className="w-full rounded border p-2"
+        >
           <option value="">(Optional)</option>
-          {(assetClasses ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          {assetClasses.map((a: AssetClass) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
         </select>
       </label>
 
       {/* Instrument */}
       <InstrumentSearch
         assetClassId={assetClassId}
-        onPick={(created) => {
+        onPick={(created: {
+          id: number;
+          name: string;
+          currency_code?: string;
+        }) => {
           setValue("instrument_id", created.id);
           setValue("instrument_search", created.name);
-          if (created.currency_code) setValue("currency_code", created.currency_code);
+          if (created.currency_code) {
+            setValue("currency_code", created.currency_code);
+          }
         }}
       />
 
       {/* Date */}
       <label className="block">
         <div className="text-sm">Date*</div>
-        <input type="date" {...register("date", { required:true })} className="w-full rounded border p-2" />
+        <input
+          type="date"
+          {...register("date", { required: true })}
+          className="w-full rounded border p-2"
+        />
       </label>
 
       {/* Qty/Price */}
       <div className="grid grid-cols-2 gap-4">
         <label className="block">
           <div className="text-sm">Quantity{requires ? "*" : ""}</div>
-          <input type="number" step="any" {...register("quantity", { valueAsNumber:true })} className="w-full rounded border p-2" disabled={!requires} />
+          <input
+            type="number"
+            step="any"
+            {...register("quantity", { valueAsNumber: true })}
+            className="w-full rounded border p-2"
+            disabled={!requires}
+          />
         </label>
         <label className="block">
-          <div className="text-sm">Unit Price{requires ? "*" : ""}</div>
-          <input type="number" step="any" {...register("unit_price", { valueAsNumber:true })} className="w-full rounded border p-2" disabled={!requires} />
+          <div className="text-sm">
+            Unit Price{requires ? "*" : ""} / Amount
+          </div>
+          <input
+            type="number"
+            step="any"
+            {...register("unit_price", { valueAsNumber: true })}
+            className="w-full rounded border p-2"
+          />
         </label>
       </div>
 
       {/* Currency */}
       <label className="block">
         <div className="text-sm">Currency*</div>
-        <select {...register("currency_code", { required:true })} className="w-full rounded border p-2">
-          {(currencies ?? []).map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+        <select
+          {...register("currency_code", { required: true })}
+          className="w-full rounded border p-2"
+        >
+          {currencies.map((c: Currency) => (
+            <option key={c.code} value={c.code}>
+              {c.code}
+            </option>
+          ))}
         </select>
       </label>
 
@@ -110,7 +210,12 @@ export default function ActivityForm() {
       <div className="grid grid-cols-2 gap-4">
         <label className="block">
           <div className="text-sm">Fee</div>
-          <input type="number" step="any" {...register("fee", { valueAsNumber:true })} className="w-full rounded border p-2" />
+          <input
+            type="number"
+            step="any"
+            {...register("fee", { valueAsNumber: true })}
+            className="w-full rounded border p-2"
+          />
         </label>
         <label className="block">
           <div className="text-sm">Notes</div>
@@ -118,7 +223,10 @@ export default function ActivityForm() {
         </label>
       </div>
 
-      <button disabled={isSubmitting} className="rounded-md bg-black text-white px-4 py-2">
+      <button
+        disabled={isSubmitting}
+        className="rounded-md bg-black text-white px-4 py-2"
+      >
         {isSubmitting ? "Saving…" : "Save"}
       </button>
     </form>

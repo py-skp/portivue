@@ -64,6 +64,7 @@ type ChartPaperProps = {
   title: string;
   subtitle?: string;
   height?: number;
+  minWidth?: number | string;   // ← add this
   headerRight?: React.ReactNode;
   bodyPadding?: number;
 };
@@ -346,23 +347,31 @@ export default function Dashboard() {
         <>
           {/* KPI Cards - exactly 5 per row on lg+ */}
           <Grid container spacing={3} sx={{ mb: 4 }} columns={{ xs: 12, md: 12, lg: 15 }}>
-            <Grid item xs={12} md={6} lg={3}><Card title="Net Worth" value={`${fmt0(netWorth)} ${baseCcy}`} /></Grid>
-            <Grid item xs={12} md={6} lg={3}><Card title="Investments (MV)" value={`${fmt0(investMV)} ${baseCcy}`} /></Grid>
-            <Grid item xs={12} md={6} lg={3}><Card title="Investments (Cost)" value={`${fmt0(investCost)} ${baseCcy}`} /></Grid>
-            <Grid item xs={12} md={6} lg={3}><Card title="Cash Balance" value={`${fmt0(cash)} ${baseCcy}`} /></Grid>
-            <Grid item xs={12} md={6} lg={3}>
+            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+              <Card title="Net Worth" value={`${fmt0(netWorth)} ${baseCcy}`} />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+              <Card title="Investments (MV)" value={`${fmt0(investMV)} ${baseCcy}`} />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+              <Card title="Investments (Cost)" value={`${fmt0(investCost)} ${baseCcy}`} />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+              <Card title="Cash Balance" value={`${fmt0(cash)} ${baseCcy}`} />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+              {/* your extra card */}
+            </Grid>
               <Card
                 title="Unrealized P&L"
                 value={`${unrealized >= 0 ? '+' : ''}${fmt0(unrealized)} ${baseCcy}`}
                 color={unrealized >= 0 ? "success.main" : "error.main"}
               />
             </Grid>
-          </Grid>
-
-          {/* Charts Row - 3 Equal Width Charts */}
+{/* Row 1 — three equal charts */}
 <Grid container spacing={3} sx={{ mb: 4, width: '100%' }}>
   {/* Top Holdings FIRST */}
-  <Grid item xs={12} md={4}>
+  <Grid size={{ xs: 12, md: 4 }}>
     <ChartPaper title="Top Holdings (% of Total MV)" subtitle="Share of portfolio market value" height={450}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={topHoldings} margin={{ top: 10, right: 16, bottom: 60, left: 16 }}>
@@ -382,7 +391,7 @@ export default function Dashboard() {
   </Grid>
 
   {/* Asset Allocation */}
-  <Grid item xs={12} md={4}>
+  <Grid size={{ xs: 12, md: 4 }}>
     <ChartPaper title={`Asset Allocation (${baseCcy})`} height={450}>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
@@ -393,7 +402,10 @@ export default function Dashboard() {
             cx="50%" cy="45%"
             innerRadius="48%" outerRadius="80%"
             paddingAngle={3}
-            label={({ percent }) => `${Math.round((percent || 0) * 100)}%`}
+            label={({ percent }) => {
+              const p = typeof percent === "number" ? percent : Number(percent ?? 0);
+              return `${Math.round(p * 100)}%`;
+            }}
             labelLine={false}
           >
             {allocByClass.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="none" />)}
@@ -407,7 +419,7 @@ export default function Dashboard() {
   </Grid>
 
   {/* Broker Allocation */}
-  <Grid item xs={12} md={4}>
+  <Grid size={{ xs: 12, md: 4 }}>
     <ChartPaper title="Broker Allocation (Equities)" height={450}>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
@@ -418,7 +430,10 @@ export default function Dashboard() {
             cx="50%" cy="45%"
             innerRadius="48%" outerRadius="80%"
             paddingAngle={3}
-            label={({ percent }) => `${Math.round((percent || 0) * 100)}%`}
+            label={({ percent }) => {
+              const p = typeof percent === "number" ? percent : Number(percent ?? 0);
+              return `${Math.round(p * 100)}%`;
+            }}
             labelLine={false}
           >
             {allocByBrokerEquities.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="none" />)}
@@ -432,15 +447,11 @@ export default function Dashboard() {
   </Grid>
 </Grid>
 
-          {/* Second Row - Top Holdings + Movers (both unified look) */}
-<Grid container spacing={3} sx={{ mb: 4, width: "100%" }} columns={{ xs: 12, md: 12 }}>
+{/* Row 2 — two half-width panels */}
+<Grid container spacing={3} sx={{ mb: 4, width: "100%" }}>
   {/* P&L by Asset Class */}
-  <Grid item xs={12} md={6}>
-    <ChartPaper
-      title={`P&L by Asset Class (${baseCcy})`}
-      height={420}
-      minWidth={650}                     // <-- disable minWidth so both flex 50/50
-    >
+  <Grid size={{ xs: 12, md: 6 }}>
+    <ChartPaper title={`P&L by Asset Class (${baseCcy})`} height={420}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={pnlByClass} layout="vertical" margin={{ left: 12, right: 16, top: 10, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
@@ -456,10 +467,10 @@ export default function Dashboard() {
   </Grid>
 
   {/* Top Performance Movers */}
-  <Grid item xs={12} md={6}>
-    <ChartPaper title="Top Performance Movers" subtitle="Highest % P&L changes in the selected period" height={420} minWidth={600}>
+  <Grid size={{ xs: 12, md: 6 }}>
+    <ChartPaper title="Top Performance Movers" subtitle="Highest % P&L changes in the selected period" height={420}>
       <Grid container spacing={3} sx={{ height: "100%" }}>
-        <Grid item xs={12} sm={6} sx={{ display:"flex", flexDirection:"column", minHeight:0 }}>
+        <Grid size={{ xs: 12, sm: 6 }} sx={{ display:"flex", flexDirection:"column", minHeight:0 }}>
           <Typography variant="subtitle1" sx={{ mb: 2, color: 'success.main', fontWeight: 600 }}>
             🔥 Top Gainers
           </Typography>
@@ -485,7 +496,7 @@ export default function Dashboard() {
           </TableContainer>
         </Grid>
 
-        <Grid item xs={12} sm={6} sx={{ display:"flex", flexDirection:"column", minHeight:0 }}>
+        <Grid size={{ xs: 12, sm: 6 }} sx={{ display:"flex", flexDirection:"column", minHeight:0 }}>
           <Typography variant="subtitle1" sx={{ mb: 2, color: 'error.main', fontWeight: 600 }}>
             📉 Top Losers
           </Typography>

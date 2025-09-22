@@ -115,7 +115,8 @@ export default function AccountsBalancesPage() {
   const [actRows, setActRows] = useState<Activity[]>([]);
   const [instMap, setInstMap] = useState<Record<number, Instrument>>({});
 
-  const baseCcy = rows.length ? (rows[0].base_currency || "BASE") : "BASE";
+  // const baseCcy = rows.length ? (rows[0].base_currency || "BASE") : "BASE";
+  const baseCcy = rows[0]?.base_currency ?? "BASE";
 
   // initial load
   useEffect(() => {
@@ -529,17 +530,17 @@ export default function AccountsBalancesPage() {
           {actAccount && (
             <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
               <Grid container spacing={2}>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                     {actAccount.account_name}
                   </Typography>
                 </Grid>
-                <Grid item xs={6} md={4}><b>Type:</b> {actAccount.account_type || "—"}</Grid>
-                <Grid item xs={6} md={4}><b>Currency:</b> {actAccount.account_currency}</Grid>
-                <Grid item xs={6} md={4}><b>As of:</b> {actAccount.as_of}</Grid>
-                <Grid item xs={6} md={4}><b>Balance (CCY):</b> {fmtMoney(actAccount.balance_ccy)}</Grid>
-                <Grid item xs={6} md={4}><b>FX → {actAccount.base_currency}:</b> {fmtRate(actAccount.fx_rate)}</Grid>
-                <Grid item xs={6} md={4}><b>Balance ({actAccount.base_currency}):</b> {fmtMoney(actAccount.balance_base)}</Grid>
+                <Grid size={{ xs: 6, md: 4 }}><b>Type:</b> {actAccount.account_type || "—"}</Grid>
+                <Grid size={{ xs: 6, md: 4 }}><b>Currency:</b> {actAccount.account_currency}</Grid>
+                <Grid size={{ xs: 6, md: 4 }}><b>As of:</b> {actAccount.as_of}</Grid>
+                <Grid size={{ xs: 6, md: 4 }}><b>Balance (CCY):</b> {fmtMoney(actAccount.balance_ccy)}</Grid>
+                <Grid size={{ xs: 6, md: 4 }}><b>FX → {actAccount.base_currency}:</b> {fmtRate(actAccount.fx_rate)}</Grid>
+                <Grid size={{ xs: 6, md: 4 }}><b>Balance ({actAccount.base_currency}):</b> {fmtMoney(actAccount.balance_base)}</Grid>
               </Grid>
             </Paper>
           )}

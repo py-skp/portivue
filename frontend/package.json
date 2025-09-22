@@ -8,17 +8,20 @@
     "start": "next start"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^7.3.2",
-    "@mui/material": "^7.3.2",
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@mui/icons-material": "7.3.2",
+    "@mui/material": "7.3.2",
+    "@mui/system": "7.3.2",
+    "@mui/x-data-grid": "^8.11.3",
     "@nivo/treemap": "^0.99.0",
     "lucide-react": "^0.544.0",
     "next": "^14.2.31",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.62.0",
-    "recharts": "^3.2.1"
+    "recharts": "^3.2.1",
+    "swr": "^2.3.6"
   },
   "devDependencies": {
     "@types/node": "24.3.0",

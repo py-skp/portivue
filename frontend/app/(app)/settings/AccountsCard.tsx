@@ -45,10 +45,14 @@ export default function AccountsCard() {
 
     setCurrencies(list);
 
-    // set default if current value is not in the list
-    if (list.length && !list.find(c => c.code === form.currency_code)) {
-      setForm(f => ({ ...f, currency_code: list.find(c => c.code === "USD")?.code || list[0].code }));
-    }
+if (list.length && !list.find(c => c.code === form.currency_code)) {
+  const fallback =
+    list.find(c => c.code === "USD")?.code   // prefer USD if present
+    ?? list[0]?.code                         // else first item if it exists
+    ?? "";                                   // else empty string (safe default)
+
+  setForm(f => ({ ...f, currency_code: fallback }));
+}
   }
 
   async function loadAll() {

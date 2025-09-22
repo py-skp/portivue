@@ -1,6 +1,7 @@
+// app/login/page.tsx
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { AuthLayout } from "@/components/auth/AuthLayout";
@@ -9,7 +10,9 @@ import { AuthCard } from "@/components/auth/AuthCard";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Stack, Typography } from "@mui/material";
 
-export default function LoginPage() {
+export const dynamic = "force-dynamic"; // avoid prerender errors on auth pages
+
+function LoginInner() {
   const { me, loading, loginWithGoogle } = useAuth();
   const sp = useSearchParams();
   const router = useRouter();
@@ -26,7 +29,7 @@ export default function LoginPage() {
 
   return (
     <AuthLayout
-      hero={<Hero />}  // left on md+, below on xs
+      hero={<Hero />}
       card={
         <AuthCard>
           <Stack spacing={2}>
@@ -49,5 +52,13 @@ export default function LoginPage() {
         </AuthCard>
       }
     />
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
   );
 }

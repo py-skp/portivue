@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import {
-  Box, Paper, Tabs, Tab, useMediaQuery, Theme, Divider, Typography
+  Box, Paper, Tabs, Tab, useMediaQuery, Divider, Typography
 } from "@mui/material";
+import type { Theme } from "@mui/material";
 
 import FxRatesToolsCard from "./FxRatesToolsCard";
 import SettingsSecurityCard from "./SettingsSecurityCard";

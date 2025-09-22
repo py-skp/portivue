@@ -23,6 +23,7 @@ export default function FinlyticsLogo({
   gap?: number;
 }) {
   if (variant === "portivue") {
+    // ✅ PortivueLockup now accepts a color prop
     return <PortivueLockup color={color} />;
   }
 
@@ -44,13 +45,23 @@ export default function FinlyticsLogo({
 /* =========================
    PORTIVUE LOCKUP (exact)
    ========================= */
-export function PortivueLockup() {
+export function PortivueLockup({
+  color = "#6B7280",
+  width = 240,
+  height = 55,
+}: {
+  color?: string;
+  width?: number;
+  height?: number;
+}) {
+  // Use `currentColor` inside the SVG and set `color` on the root <svg>
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 960 220"
-      width="240"
-      height="55"
+      width={width}
+      height={height}
+      style={{ display: "block", color }}   // ← drives currentColor
       fill="none"
     >
       <g id="pv-mark" transform="translate(0,0)">
@@ -63,7 +74,7 @@ export function PortivueLockup() {
              C156 104 140 120 120 120 
              L72 120"
           fill="none"
-          stroke="#6B7280"
+          stroke="currentColor"
           strokeWidth="12"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -72,7 +83,7 @@ export function PortivueLockup() {
         <path
           d="M92 176 L130 112 L168 150"
           fill="none"
-          stroke="#6B7280"
+          stroke="currentColor"
           strokeWidth="12"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -80,7 +91,7 @@ export function PortivueLockup() {
         <path
           d="M168 150 L168 128 L192 128"
           fill="none"
-          stroke="#6B7280"
+          stroke="currentColor"
           strokeWidth="12"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -89,12 +100,12 @@ export function PortivueLockup() {
         <path
           d="M192 128 L184 120 M192 128 L184 136"
           fill="none"
-          stroke="#6B7280"
+          stroke="currentColor"
           strokeWidth="12"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Accent dots */}
+        {/* Accent dots (stay green) */}
         <circle cx="148" cy="131" r="3.5" fill="#22C55E" />
         <circle cx="156" cy="140" r="3.5" fill="#22C55E" />
       </g>
@@ -107,7 +118,7 @@ export function PortivueLockup() {
           fontFamily="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial"
           fontWeight="800"
           fontSize="40"
-          fill="#6B7280"
+          fill="currentColor"
         >
           PORTIVUE
         </text>
@@ -118,7 +129,7 @@ export function PortivueLockup() {
           y1="190"
           x2="396"
           y2="190"
-          stroke="#6B7280"
+          stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
         />
@@ -127,7 +138,7 @@ export function PortivueLockup() {
           y1="190"
           x2="275"
           y2="190"
-          stroke="#6B7280"
+          stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
         />
@@ -139,7 +150,7 @@ export function PortivueLockup() {
           fontFamily="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto"
           fontWeight="500"
           fontSize="10"
-          fill="#6B7280"
+          fill="currentColor"
         >
           <tspan fontWeight="700">M</tspan>udric
         </text>
@@ -166,7 +177,7 @@ function Rule({ color }: { color: string }) {
    ============== */
 function PVIcon({
   height = 52,
-  stroke="#6B7280",
+  stroke = "#6B7280",
   hideDots = false,
 }: {
   height?: number;

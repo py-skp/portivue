@@ -1,12 +1,15 @@
+// app/2fa/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { api } from "@/lib/api";
 import { Box, Paper, Typography, TextField, Button, Alert, Stack } from "@mui/material";
 
-export default function TwoFA() {
+export const dynamic = "force-dynamic"; // auth pages shouldn't be statically prerendered
+
+function TwoFAInner() {
   const { me, loading, refresh } = useAuth();
   const sp = useSearchParams();
   const router = useRouter();
@@ -68,5 +71,14 @@ export default function TwoFA() {
         </Box>
       </Paper>
     </Box>
+  );
+}
+
+export default function TwoFAPage() {
+  // Wrap the client component that uses useSearchParams in Suspense
+  return (
+    <Suspense fallback={null}>
+      <TwoFAInner />
+    </Suspense>
   );
 }

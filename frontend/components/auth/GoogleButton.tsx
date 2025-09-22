@@ -1,5 +1,6 @@
 import * as React from "react";
-import { Button, ButtonProps } from "@mui/material";
+import { Button } from "@mui/material";
+import type { ButtonProps } from "@mui/material";
 import GoogleIcon from "@mui/icons-material/Google";
 
 type Props = Omit<ButtonProps, "variant" | "size" | "startIcon">;

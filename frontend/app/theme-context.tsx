@@ -3,7 +3,8 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { ThemeProvider, CssBaseline } from "@mui/material";
-import { buildTheme, Mode } from "./theme";
+import { buildTheme } from "./theme";
+import type { Mode } from "./theme";
 
 type Ctx = { mode: Mode; setMode: (m: Mode) => void; toggle: () => void };
 const ThemeCtx = createContext<Ctx | null>(null);

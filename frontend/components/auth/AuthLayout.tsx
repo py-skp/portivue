@@ -1,7 +1,5 @@
 import * as React from "react";
 import { Box } from "@mui/material";
-import styles from "@/styles/globals.css";
-
 type Props = {
   hero: React.ReactNode; // headline, chips, terms
   card: React.ReactNode; // auth card
@@ -10,7 +8,7 @@ type Props = {
 export function AuthLayout({ hero, card }: Props) {
   return (
     <Box
-      className={styles.authRoot}
+      className="authRoot"
       sx={{
         minHeight: "100vh",
         position: "relative",
@@ -23,7 +21,7 @@ export function AuthLayout({ hero, card }: Props) {
       }}
     >
       {/* Global background behind everything */}
-      <Box aria-hidden className={styles.globalBg} />
+      <Box aria-hidden className="globalBg" />
 
       {/* HERO (left on md+, second on mobile) */}
       <Box
@@ -41,7 +39,7 @@ export function AuthLayout({ hero, card }: Props) {
         {/* disable mask on small screens to avoid overlaps */}
         <Box
           aria-hidden
-          className={styles.subtleGridMask}
+          className="subtleGridMask"
           sx={{ display: { xs: "none", md: "block" } }}
         />
         <Box sx={{ maxWidth: 640, position: "relative", width: "100%", zIndex: 2 }}>

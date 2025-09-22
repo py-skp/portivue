@@ -12,8 +12,6 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import EditIcon from "@mui/icons-material/Edit";
 import SearchIcon from "@mui/icons-material/Search";
-
-// const API = process.env.NEXT_PUBLIC_API!;
 import { api } from "@/lib/api";
 
 // ---------- Types ----------
@@ -75,7 +73,7 @@ function computeTotalLocal(a: ActivityCore): number {
 }
 
 function isCalc(x: Activity): x is ActivityCalc {
-  return "base_currency" in x && "net_amount_base" in x;
+  return (x as any)?.base_currency !== undefined && (x as any)?.net_amount_base !== undefined;
 }
 
 // ---------- Component ----------
@@ -137,10 +135,12 @@ export default function ActivitiesPage() {
   const [instOptions, setInstOptions] = useState<InstOption[]>([]);
   const [lockCcy, setLockCcy] = useState(false);
 
-  const showBaseCols = useMemo(
-    () => rows.length > 0 && isCalc(rows[0]),
-    [rows]
-  );
+  // base columns visibility & base currency
+  const showBaseCols = useMemo(() => {
+    const first = rows[0];
+    return first !== undefined && isCalc(first);
+  }, [rows]);
+
   const baseCurrency = useMemo(() => {
     if (!showBaseCols) return undefined;
     return (rows[0] as ActivityCalc).base_currency;
@@ -151,13 +151,8 @@ export default function ActivitiesPage() {
     setLoading(true);
     setErr(null);
     try {
-      // activities
-      // const actRes = await fetch(`${API}/activities`);
-      // if (!actRes.ok) throw new Error(`GET /activities → ${actRes.status}`);
-      // const acts: Activity[] = await actRes.json();
-      const acts = await api<Activity[]>("/activities"); // cookies included
+      const acts = await api<Activity[]>("/activities");
 
-      // lookups
       const [accs, brks] = await Promise.all([
         api<Account[]>("/lookups/accounts"),
         api<Broker[]>("/lookups/brokers").catch(() => []),
@@ -247,28 +242,29 @@ export default function ActivitiesPage() {
     const q = editInstrumentSearch || "";
     const t = setTimeout(async () => {
       if (!q.trim()) { setInstOptions([]); return; }
-    const [localRes, yahooRes] = await Promise.allSettled([
-      api<Instrument[]>(`/instruments?q=${encodeURIComponent(q)}&limit=10`),
-      api<{ items?: any[] }>(`/instruments/suggest?q=${encodeURIComponent(q)}&limit=10`),
-    ]);
+      const [localRes, yahooRes] = await Promise.allSettled([
+        api<Instrument[]>(`/instruments?q=${encodeURIComponent(q)}&limit=10`),
+        api<{ items?: any[] }>(`/instruments/suggest?q=${encodeURIComponent(q)}&limit=10`),
+      ]);
 
-    const opts: InstOption[] = [];
-    if (localRes.status === "fulfilled") {
-      for (const inst of localRes.value) {
-        opts.push({
-          source: "local",
-          id: inst.id,
-          name: inst.name,
-          symbol: inst.symbol,
-          currency: inst.currency_code,
-        });
+      const opts: InstOption[] = [];
+      if (localRes.status === "fulfilled") {
+        for (const inst of localRes.value) {
+          opts.push({
+            source: "local",
+            id: inst.id,
+            name: inst.name,
+            symbol: inst.symbol,
+            currency: inst.currency_code,
+          });
+        }
       }
-    }
-    if (yahooRes.status === "fulfilled") {
-      for (const it of yahooRes.value?.items ?? []) {
-        opts.push({ source: "yahoo", ...it });
+      if (yahooRes.status === "fulfilled") {
+        for (const it of yahooRes.value?.items ?? []) {
+          // trust backend to normalize to { name, symbol, currency?, exchange?, type? }
+          opts.push({ source: "yahoo", ...(it as any) });
+        }
       }
-}
       setInstOptions(opts);
     }, 250);
     return () => clearTimeout(t);
@@ -302,7 +298,6 @@ export default function ActivitiesPage() {
         note: editNote || "",
       };
 
-      // PATCH preferred; fallback to PUT if API requires
       let updated: Activity;
       try {
         updated = await api<Activity>(`/activities/${editRow.id}`, {
@@ -310,23 +305,20 @@ export default function ActivitiesPage() {
           body: JSON.stringify(payload),
         });
       } catch {
-        // Fallback if backend only supports PUT
         updated = await api<Activity>(`/activities/${editRow.id}`, {
           method: "PUT",
           body: JSON.stringify(payload),
         });
       }
 
-      // Update local caches
       setRows(prev => prev.map(x => (x.id === updated.id ? updated : x)));
 
-      // maybe we fetched a different instrument
+      // fetch instrument if it wasn't in cache
       if (updated.instrument_id && !instMap[updated.instrument_id]) {
-        const rr = await fetch(`${API}/instruments/${updated.instrument_id}`);
-        if (rr.ok) {
-          const inst = await rr.json();
+        try {
+          const inst = await api<Instrument>(`/instruments/${updated.instrument_id}`);
           setInstMap(prev => ({ ...prev, [inst.id]: inst }));
-        }
+        } catch {}
       }
       closeEdit();
     } catch (e: any) {
@@ -443,8 +435,8 @@ export default function ActivitiesPage() {
                   {cols.unitPrice && <TableCell align="right">Unit Price / Amount</TableCell>}
                   {cols.totalLocal && <TableCell align="right">Total</TableCell>}
                   {cols.ccy && <TableCell>CCY</TableCell>}
-                  {showBaseCols && cols.fx && <TableCell align="right">FX → {(rows[0] as ActivityCalc).base_currency}</TableCell>}
-                  {showBaseCols && cols.totalBase && <TableCell align="right">Total ({(rows[0] as ActivityCalc).base_currency})</TableCell>}
+                  {showBaseCols && cols.fx && <TableCell align="right">FX → {baseCurrency}</TableCell>}
+                  {showBaseCols && cols.totalBase && <TableCell align="right">Total ({baseCurrency})</TableCell>}
                   {cols.note && <TableCell>Note</TableCell>}
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
@@ -515,7 +507,15 @@ export default function ActivitiesPage() {
             {Object.entries(cols).map(([k, v]) => (
               <FormControlLabel
                 key={k}
-                control={<Checkbox size="small" checked={v} onChange={() => setCols(prev => ({ ...prev, [k]: !prev[k as keyof typeof prev] }))} />}
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={v}
+                    onChange={() =>
+                      setCols(prev => ({ ...prev, [k]: !prev[k as keyof typeof prev] }))
+                    }
+                  />
+                }
                 label={k
                   .replace(/([A-Z])/g, " $1")
                   .replace(/^./, (c) => c.toUpperCase())
@@ -572,7 +572,6 @@ export default function ActivitiesPage() {
                 onChange={(e) => setEditCcy(e.target.value)}
                 disabled={lockCcy}
               >
-                {/* light lookup from accounts map (collect unique) */}
                 {[...new Set(Object.values(accounts).map(a => a.currency_code).filter(Boolean))].map(ccy =>
                   <MenuItem key={ccy} value={ccy!}>{ccy}</MenuItem>
                 )}
@@ -586,44 +585,77 @@ export default function ActivitiesPage() {
               value={
                 editInstrumentId
                   ? ({ source: "local", id: editInstrumentId, name: instMap[editInstrumentId]?.name ?? "", symbol: instMap[editInstrumentId]?.symbol ?? null } as InstOption)
-                  : (editInstrumentSearch as unknown as InstOption)
+                  : (editInstrumentSearch as unknown as InstOption | null)
               }
               onInputChange={(_, val) => {
-                setEditInstrumentSearch(typeof val === "string" ? val : "");
+                if (typeof val === "string") {
+                  setEditInstrumentSearch(val);
+                } else {
+                  // when user picks option object, MUI also triggers input change; ignore here
+                  setEditInstrumentSearch(prev => prev);
+                }
                 setLockCcy(false);
               }}
               onChange={async (_, val) => {
-                if (!val) { setEditInstrumentId(undefined); return; }
+                if (val == null) {
+                  setEditInstrumentId(undefined);
+                  return;
+                }
+                if (typeof val === "string") {
+                  // user typed and pressed Enter without selecting a suggestion
+                  try {
+                    const inst = await upsertYahoo(val);
+                    setEditInstrumentId(inst.id);
+                    setEditInstrumentSearch(inst.symbol || inst.name);
+                    if (inst.currency_code) { setEditCcy(inst.currency_code); setLockCcy(true); }
+                  } catch (e: any) {
+                    setEditErr(e.message || "Failed to add instrument");
+                  }
+                  return;
+                }
+                // InstOption object
                 if (val.source === "local") {
                   setEditInstrumentId(val.id);
                   setEditInstrumentSearch(val.symbol || val.name);
                   if (val.currency) { setEditCcy(val.currency); setLockCcy(true); }
-                  return;
+                } else {
+                  // yahoo — requires upsert
+                  try {
+                    const inst = await upsertYahoo(val.symbol, val.type);
+                    setEditInstrumentId(inst.id);
+                    setEditInstrumentSearch(inst.symbol || inst.name);
+                    if (inst.currency_code) { setEditCcy(inst.currency_code); setLockCcy(true); }
+                  } catch (e: any) {
+                    setEditErr(e.message || "Failed to add instrument");
+                  }
                 }
-                // yahoo upsert
-                try {
-                  const inst = await upsertYahoo(val.symbol, val.type);
-                  setEditInstrumentId(inst.id);
-                  setEditInstrumentSearch(inst.symbol || inst.name);
-                  if (inst.currency_code) { setEditCcy(inst.currency_code); setLockCcy(true); }
-                } catch (e: any) {
-                  setEditErr(e.message || "Failed to add instrument");
-                }
+              }}
+              isOptionEqualToValue={(o, v) => {
+                if (typeof v === "string") return false;
+                if (o.source === "local" && v.source === "local") return o.id === v.id;
+                return o.source === v.source && (o as any).symbol === (v as any).symbol;
               }}
               getOptionLabel={(o) =>
                 typeof o === "string"
                   ? o
-                  : o.name
-                    ? `${o.name}${o.symbol ? ` (${o.symbol})` : ""}`
-                    : (o.symbol || "")
+                  : (o.name || o.symbol || "")
               }
               renderInput={(p) => <TextField {...p} label="Instrument" />}
               renderOption={(props, option) => (
-                <li {...props} key={`${option.source}-${"id" in option ? option.id : option.symbol}`}>
+                <li
+                  {...props}
+                  key={`${option.source}-${"id" in option ? option.id : option.symbol}`}
+                >
                   <Box>
-                    <Typography variant="body2">{("name" in option ? option.name : option.symbol) || ""}{("symbol" in option && option.symbol && "name" in option && option.name) ? ` (${option.symbol})` : ""}</Typography>
+                    <Typography variant="body2">
+                      {(option.name || option.symbol || "")}
+                      {("symbol" in option && option.symbol && option.name) ? ` (${option.symbol})` : ""}
+                    </Typography>
                     <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                      {option.currency ?? ""}{("type" in option && option.type) ? ` · ${option.type}` : ""}{("exchange" in option && option.exchange) ? ` · ${option.exchange}` : ""}{option.source === "local" ? " · local" : ""}
+                      {(option as any).currency ?? ""}
+                      {("type" in option && option.type) ? ` · ${option.type}` : ""}
+                      {("exchange" in option && option.exchange) ? ` · ${option.exchange}` : ""}
+                      {option.source === "local" ? " · local" : ""}
                     </Typography>
                   </Box>
                 </li>
@@ -631,7 +663,7 @@ export default function ActivitiesPage() {
             />
 
             {/* Trade vs non-trade inputs */}
-            {editType === "Buy" || editType === "Sell" ? (
+            {(editType === "Buy" || editType === "Sell") ? (
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                 <TextField
                   fullWidth type="number" label="Quantity"

@@ -76,10 +76,6 @@ export default function NewActivityPage() {
   const [options, setOptions] = useState<Option[]>([]);
   const [lockCurrency, setLockCurrency] = useState(false);
 
-  // ⇨ AVAILABILITY: state for available quantity
-  const [availableQty, setAvailableQty] = useState<number | null>(null);
-  const [checkingAvail, setCheckingAvail] = useState(false);
-
   // success toast
   const [successOpen, setSuccessOpen] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
@@ -176,55 +172,13 @@ export default function NewActivityPage() {
 
   const currencyCode = watch("currency_code") || currencies[0]?.code || "";
 
-  // ⇨ AVAILABILITY: fetch when Sell + (account|broker|instrument|date) changes
-  const accountId = watch("account_id");
-  const brokerId = watch("broker_id") || "";
-  const instrumentId = watch("instrument_id");
-  const tradeDate = watch("date");
-
-  useEffect(() => {
-    if (type !== "Sell" || !accountId || !instrumentId) {
-      setAvailableQty(null);
-      return;
-    }
-    (async () => {
-      setCheckingAvail(true);
-      try {
-        const qs = new URLSearchParams({
-          account_id: String(accountId),
-          instrument_id: String(instrumentId),
-        });
-        if (brokerId !== "") qs.append("broker_id", String(brokerId));
-        if (tradeDate) qs.append("on", tradeDate);
-
-        const res = await fetch(`${API}/activities/positions/available?${qs.toString()}`);
-        if (res.ok) {
-          const data = await res.json();
-          setAvailableQty(typeof data?.available_qty === "number" ? data.available_qty : 0);
-        } else {
-          setAvailableQty(null);
-        }
-      } catch {
-        setAvailableQty(null);
-      } finally {
-        setCheckingAvail(false);
-      }
-    })();
-  }, [type, accountId, brokerId, instrumentId, tradeDate]);
-
-  // ⇨ AVAILABILITY: prevent oversell
-  const qtyEntered = Number(watch("quantity") || 0);
-  const oversell = type === "Sell" && availableQty != null && qtyEntered > availableQty + 1e-9;
-
   const canSave =
     !!watch("account_id") &&
     !!watch("instrument_id") &&
     !!watch("date") &&
     !!watch("currency_code") &&
     (isTrade
-      ? (Number(watch("quantity")) || 0) > 0 &&
-        (Number(watch("unit_price")) || 0) > 0 &&
-        !oversell                           // ⇨ block Save when overselling
+      ? (Number(watch("quantity")) || 0) > 0 && (Number(watch("unit_price")) || 0) > 0
       : (Number(watch("unit_price")) || 0) > 0);
 
   const resetToBlankForm = () => {
@@ -235,7 +189,7 @@ export default function NewActivityPage() {
       fee: 0,
       date: today(),
       instrument_search: "",
-      account_id: getValues("account_id") || "",
+      account_id: getValues("account_id") || "",   // keep same account for convenience
       broker_id: "",
       currency_code: currencies?.[0]?.code || "",
       quantity: undefined,
@@ -243,6 +197,7 @@ export default function NewActivityPage() {
       note: "",
       instrument_id: undefined,
     });
+    // scroll to top so toast is visible
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -252,12 +207,6 @@ export default function NewActivityPage() {
       alert("Quantity and Unit Price are required for Buy/Sell.");
       return;
     }
-    // ⇨ AVAILABILITY: last-ditch client guard
-    if (v.type === "Sell" && availableQty != null && v.quantity! > availableQty + 1e-9) {
-      alert(`Quantity exceeds available (${availableQty}).`);
-      return;
-    }
-
     if (!isTrade && !(v.unit_price && v.unit_price > 0)) {
       alert(`${type} requires an Amount.`);
       return;
@@ -279,6 +228,7 @@ export default function NewActivityPage() {
     }
     const data = await res.json();
 
+    // Professional success message + reset to a fresh, blank form
     setSuccessMsg(`Activity #${data.id} saved successfully.`);
     setSuccessOpen(true);
     resetToBlankForm();
@@ -435,22 +385,7 @@ export default function NewActivityPage() {
           {/* Trade vs Non-trade inputs */}
           {isTrade ? (
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2.5}>
-              <TextField
-                fullWidth
-                type="number"
-                label="Quantity"
-                inputProps={{ step: "any" }}
-                {...register("quantity", { valueAsNumber: true })}
-                // ⇨ AVAILABILITY: show available & highlight oversell
-                helperText={
-                  type === "Sell"
-                    ? checkingAvail
-                      ? "Checking available…"
-                      : (availableQty != null ? `Available: ${availableQty}` : "")
-                    : ""
-                }
-                error={type === "Sell" && !!availableQty && (qtyEntered > (availableQty + 1e-9))}
-              />
+              <TextField fullWidth type="number" label="Quantity" inputProps={{ step: "any" }} {...register("quantity", { valueAsNumber: true })} />
               <TextField fullWidth type="number" label="Unit Price" inputProps={{ step: "any" }} {...register("unit_price", { valueAsNumber: true })} />
             </Stack>
           ) : (
