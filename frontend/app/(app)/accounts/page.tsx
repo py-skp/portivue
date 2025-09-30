@@ -8,8 +8,10 @@ import {
   DialogActions, TextField, MenuItem, Drawer, IconButton, Grid, TableContainer
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import { API_BASE } from "@/lib/api";
+const API = API_BASE; // resolves to "/api" if unset, no trailing slash
 
-const API = process.env.NEXT_PUBLIC_API!;
+// const API = process.env.NEXT_PUBLIC_API!;
 
 /** -------- small helper so ALL calls send cookies + JSON -------- */
 async function api<T>(path: string, init?: RequestInit): Promise<T> {

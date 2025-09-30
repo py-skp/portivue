@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { getJSON } from "@/app/api";
+import { getJSON } from "@/lib/api";
 
 export type Currency = { code: string; name?: string };
 export type AssetClass = { id: number; name: string };

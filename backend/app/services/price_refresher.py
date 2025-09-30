@@ -1,27 +1,37 @@
+# app/services/price_refresher.py
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import time
-from sqlmodel import Session, select
-from app.models.instrument import Instrument
-from app.services.yf_client import fetch_profile_and_price
 
-def refresh_all_yahoo_prices(
+from sqlmodel import Session, select
+
+from app.models.instrument import Instrument
+from app.services.yf_client import fetch_latest_price_by_provider
+
+
+def refresh_all_prices(
     session: Session,
     *,
     limit: int = 0,
     time_budget_sec: int = 25,
+    provider: str = "auto",            # {"auto","alphavantage","stooq"}
     logger: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
-    Overwrite latest_price/latest_price_at for Yahoo instruments.
+    Refresh instrument prices using the selected provider.
+
+    provider ∈ {"auto", "alphavantage", "stooq"} (default "auto").
     Processes up to `limit` rows (0 = all) or until `time_budget_sec` is exceeded.
-    Commits periodically. Returns counts and per-symbol errors.
+    Commits periodically. Returns stats + errors.
     """
-    q = select(Instrument).where(
-        Instrument.data_source == "yahoo",
-        Instrument.symbol.is_not(None),
-    ).order_by(Instrument.id.asc())
+    # Only refresh PUBLIC Yahoo rows (shared instruments)
+    q = (
+        select(Instrument)
+        .where(Instrument.data_source == "yahoo", Instrument.symbol.is_not(None))
+        .order_by(Instrument.id.asc())
+    )
     if limit and limit > 0:
         q = q.limit(limit)
 
@@ -31,19 +41,35 @@ def refresh_all_yahoo_prices(
     skipped = 0
     errors: list[str] = []
     processed = 0
-
     started = time.monotonic()
 
+    if logger:
+        logger.info(
+            "[prices] refresh start: total=%d, limit=%s, budget=%ss, provider=%s",
+            len(instruments), (limit or "ALL"), time_budget_sec, provider,
+        )
+
     for inst in instruments:
-        processed += 1
-        # stop if we’re about to exceed the proxy’s timeout
+        # Soft time budget
         if (time.monotonic() - started) >= time_budget_sec:
+            if logger:
+                logger.info("[prices] stopping early due to time budget (processed=%s)", processed)
             break
 
+        processed += 1
+        sym = (inst.symbol or "").strip().upper()
+        if not sym:
+            skipped += 1
+            if logger:
+                logger.warning("[prices] SKIPPED (no symbol) id=%s", inst.id)
+            continue
+
         try:
-            res = fetch_profile_and_price(inst.symbol or "")
+            res = fetch_latest_price_by_provider(sym, provider=provider)
             if not res:
                 skipped += 1
+                if logger:
+                    logger.warning("[prices] SKIPPED %s: no data from provider=%s", sym, provider)
                 continue
 
             price = res.get("latest_price")
@@ -51,41 +77,56 @@ def refresh_all_yahoo_prices(
 
             if price is None:
                 skipped += 1
+                if logger:
+                    logger.warning("[prices] SKIPPED %s: missing price field from provider=%s", sym, provider)
                 continue
 
             inst.latest_price = float(price)
             inst.latest_price_at = ts
-
-            # backfill metadata if missing
-            inst.currency_code = inst.currency_code or res.get("currency_code") or inst.currency_code
-            inst.asset_class = inst.asset_class or res.get("asset_class") or inst.asset_class
-            inst.asset_subclass = inst.asset_subclass or res.get("asset_subclass") or inst.asset_subclass
-            inst.name = inst.name or res.get("name") or inst.name
-
+            session.add(inst)
             updated += 1
 
-            # commit periodically to keep the txn small
+            if logger:
+                ts_s = ts.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z")
+                logger.info("[prices] UPDATED %-10s px=%s at=%s provider=%s", sym, price, ts_s, provider)
+
+            # Periodic commit to keep transaction small
             if (processed % 25) == 0:
                 session.commit()
+                if logger:
+                    logger.info("[prices] committed after %d instruments", processed)
 
         except Exception as e:
-            msg = f"{inst.symbol or inst.id}: {e}"
+            msg = f"{sym or inst.id}: {e}"
             errors.append(msg)
             if logger:
-                logger.exception(msg)
+                logger.exception("[prices] ERROR %s", sym)
 
+    # Final commit
     session.commit()
 
     total = len(instruments)
     elapsed = time.monotonic() - started
-    partial = (updated + skipped) < total  # stopped early due to budget/limit
+    partial = (updated + skipped) < total
 
-    return {
+    result = {
+        "provider": provider,
         "total_considered": total,
         "processed": updated + skipped,
         "updated": updated,
         "skipped": skipped,
         "partial": partial,
         "elapsed_sec": round(elapsed, 2),
-        "errors": errors[:50],  # keep payload modest
+        "errors": errors[:50],
     }
+
+    if logger:
+        # Don’t dump the errors array in the info log (keeps logs tidy)
+        log_snapshot = {k: v for k, v in result.items() if k != "errors"}
+        logger.info("[prices] refresh done: %s", log_snapshot)
+
+    return result
+
+
+# Backwards-compat alias (old imports still work)
+refresh_all_yahoo_prices = refresh_all_prices

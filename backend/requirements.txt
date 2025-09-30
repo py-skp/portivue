@@ -1,5 +1,6 @@
 httpx==0.27.2
 yfinance==0.2.43
+yahooquery==2.3.7
 fastapi-admin
 sqlalchemy[asyncio]
 jinja2
@@ -15,4 +16,9 @@ pydantic-settings
 python-multipart
 requests
 alembic
-EOF
+authlib
+pyotp
+qrcode
+passlib
+APScheduler==3.10.4
+gunicorn==21.2.0

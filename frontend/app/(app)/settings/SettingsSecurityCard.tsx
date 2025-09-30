@@ -9,7 +9,10 @@ import {
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DownloadIcon from "@mui/icons-material/Download";
 
-const API = process.env.NEXT_PUBLIC_API!;
+import { API_BASE } from "@/lib/api";
+const API = API_BASE; // resolves to "/api" if unset, no trailing slash
+
+// const API = process.env.NEXT_PUBLIC_API!;
 
 export default function SettingsPage() {
   const { me, refresh } = useAuth();

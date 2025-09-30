@@ -16,7 +16,7 @@
 
     # app/models/fx.py
 from sqlmodel import SQLModel, Field
-from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy import UniqueConstraint, Index, desc
 from datetime import date as Date
 
 class FxRate(SQLModel, table=True):
@@ -31,4 +31,5 @@ class FxRate(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("base", "quote", "as_of_date", name="uq_fx_rates_day"),
         Index("ix_fx_rates_pair", "base", "quote"),
+        Index("ix_fx_rates_pair_date_desc", "base", "quote", desc("as_of_date")),
     )

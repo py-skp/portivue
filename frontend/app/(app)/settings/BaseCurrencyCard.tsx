@@ -6,7 +6,10 @@ import {
   Button, Alert, CircularProgress
 } from "@mui/material";
 
-const API = process.env.NEXT_PUBLIC_API!; // "/api" via Next rewrites
+import { API_BASE } from "@/lib/api";
+const API = API_BASE; // resolves to "/api" if unset, no trailing slash
+
+// const API = process.env.NEXT_PUBLIC_API!; // "/api" via Next rewrites
 
 type Currency = { code: string; name?: string | null };
 
@@ -32,7 +35,10 @@ export default function BaseCurrencyCard() {
       const rs = await fetch(`${API}/settings`, { credentials: "include" });
       if (!rs.ok) throw new Error(`Settings ${rs.status}`);
       const s = await rs.json();
-      setBase(s.base_currency_code || "");
+      const saved = s.base_currency_code?.trim();
+
+      // Force default = USD if nothing saved
+      setBase(saved || "USD");
     } catch (e: any) {
       setErr(e.message || String(e));
     } finally {
@@ -76,23 +82,22 @@ export default function BaseCurrencyCard() {
           <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
             <FormControl size="small" sx={{ minWidth: 220 }}>
               <InputLabel id="base-currency-label">Base Currency</InputLabel>
-              <Select
-                labelId="base-currency-label"
-                label="Base Currency"
-                value={base}
-                onChange={(e) => setBase(e.target.value)}
-                displayEmpty
-              >
-                <MenuItem value=""><em>(none)</em></MenuItem>
-                {currencies.map((c) => (
-                  <MenuItem key={c.code} value={c.code}>
-                    {c.code}{c.name ? ` — ${c.name}` : ""}
-                  </MenuItem>
-                ))}
-              </Select>
+                <Select
+                  labelId="base-currency-label"
+                  label="Base Currency"
+                  value={base}
+                  onChange={(e) => setBase(e.target.value)}
+                  required
+                >
+                  {currencies.map((c) => (
+                    <MenuItem key={c.code} value={c.code}>
+                      {c.code}{c.name ? ` — ${c.name}` : ""}
+                    </MenuItem>
+                  ))}
+                </Select>
             </FormControl>
 
-            <Button variant="contained" onClick={save} disabled={saving}>
+            <Button variant="contained" onClick={save} disabled={saving || !base}>
               {saving ? "Saving…" : "Save"}
             </Button>
             <Button variant="text" onClick={load} disabled={saving}>

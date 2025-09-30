@@ -1,17 +1,19 @@
 # app/core/db.py
 from __future__ import annotations
-from sqlmodel import SQLModel, Session, create_engine
+
 from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel, Session, create_engine, text
+
 from app.core.config import settings
 
-# --- Engine ---
+# --- Engine (sync) ---
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     future=True,
 )
 
-# --- Session factory (per-request in FastAPI) ---
+# --- Session factory ---
 SessionLocal = sessionmaker(
     bind=engine,
     class_=Session,
@@ -19,28 +21,50 @@ SessionLocal = sessionmaker(
     autocommit=False,
 )
 
+
 def get_session():
-    """FastAPI dependency: yields a DB session per-request."""
+    """FastAPI dependency: yields a DB session per request."""
     with SessionLocal() as session:
         yield session
 
+
 def init_db() -> None:
     """
-    Create tables if they don’t exist (dev).
-    IMPORTANT: import all model modules BEFORE create_all so metadata is populated.
+    Create tables if they don’t exist (idempotent),
+    then seed reference data like currencies.
     """
-    # Eagerly import models so SQLModel.metadata knows about every table:
-    import app.models.user            # noqa: F401
-    import app.models.broker          # noqa: F401
-    import app.models.account         # noqa: F401
-    import app.models.instrument      # noqa: F401
-    import app.models.activities        # noqa: F401
-    import app.models.price_history   # noqa: F401
-    # If you split PriceHistory into its own file:
-    try:
-        import app.models.price_history  # noqa: F401
-    except Exception:
-        # If PriceHistory lives inside instrument.py, this import is optional.
-        pass
+    # Import every module that defines SQLModel tables:
+    import app.models.user          # noqa: F401
+    import app.models.broker        # noqa: F401
+    import app.models.account       # noqa: F401
+    import app.models.instrument    # noqa: F401
+    import app.models.activities    # noqa: F401
+    import app.models.price_history # noqa: F401
+    import app.models.currency      # noqa: F401
 
+    # Creates missing tables only; safe to call every boot.
     SQLModel.metadata.create_all(engine)
+
+    # --- Seed reference currencies ---
+    currencies = [
+        ("USD", "US Dollar"),
+        ("EUR", "Euro"),
+        ("GBP", "Pound Sterling"),
+        ("GBp", "Sterling Pence"),
+        ("AED", "UAE Dirham"),
+        ("PKR", "Pak Rupee"),
+        ("INR", "Indian Rupee"),
+        ("JPY", "Japanese Yen"),
+        ("CNY", "Chinese Yuan"),
+        ("AUD", "Australian Dollar"),
+    ]
+
+    insert_sql = """
+    INSERT INTO currency (code, name)
+    VALUES (:code, :name)
+    ON CONFLICT (code) DO NOTHING
+    """
+
+    with engine.begin() as conn:
+        for code, name in currencies:
+            conn.execute(text(insert_sql), {"code": code, "name": name})

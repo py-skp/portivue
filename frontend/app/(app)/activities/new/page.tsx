@@ -17,9 +17,11 @@ import {
   Snackbar,
 } from "@mui/material";
 import MuiAlert from "@mui/material/Alert";
+import { API_BASE } from "@/lib/api";
+const API = API_BASE; // resolves to "/api" if unset, no trailing slash
 
 type Lookup = { id?: number; name?: string; code?: string; type?: string };
-const API = process.env.NEXT_PUBLIC_API!;
+// const API = process.env.NEXT_PUBLIC_API!;
 
 type FormValues = {
   type: "Buy" | "Sell" | "Dividend" | "Interest" | "Fee";

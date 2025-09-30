@@ -26,8 +26,10 @@ import {
   PieChart, Pie, Cell, Legend, Tooltip as ReTooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from "recharts";
+import { API_BASE } from "@/lib/api";
+const API = API_BASE; // resolves to "/api" if unset, no trailing slash
 
-const API = process.env.NEXT_PUBLIC_API!;
+// const API = process.env.NEXT_PUBLIC_API!;
 
 type Position = {
   account_id: number;
@@ -225,18 +227,29 @@ export default function Dashboard() {
   }, [positions, investMV]);
 
   // Top movers / losers by % P&L
-  const { topGainers, topLosers } = useMemo(() => {
-    const rows = positions.map(p => {
-      const cost = p.avg_cost_base * p.qty;
-      const pct = cost > 0 ? (p.unrealized_base / cost) * 100 : 0;
-      const label = (p.symbol || p.name || `#${p.instrument_id}`) as string;
-      return { label, pct };
-    });
-    const withCost = rows.filter(r => Number.isFinite(r.pct));
-    const gain = [...withCost].sort((a,b)=>b.pct-a.pct).slice(0, 7);
-    const lose = [...withCost].sort((a,b)=>a.pct-b.pct).slice(0, 7);
-    return { topGainers: gain, topLosers: lose };
-  }, [positions]);
+const { topGainers, topLosers } = useMemo(() => {
+  const rows = positions.map(p => {
+    const cost = p.avg_cost_base * p.qty;
+    const pct = cost > 0 ? (p.unrealized_base / cost) * 100 : 0;
+    const label = (p.symbol || p.name || `#${p.instrument_id}`) as string;
+    return { label, pct };
+  });
+
+  const withCost = rows.filter(r => Number.isFinite(r.pct));
+
+  //only positives in gainers, only negatives in losers
+  const gain = withCost
+    .filter(r => r.pct > 0)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 7);
+
+  const lose = withCost
+    .filter(r => r.pct < 0)
+    .sort((a, b) => a.pct - b.pct)
+    .slice(0, 7);
+
+  return { topGainers: gain, topLosers: lose };
+}, [positions]);
 
   /* ---------- Small KPI Card ---------- */
   const Card = ({ title, value, color }: { title: string; value: string; color?: string }) => (
@@ -345,29 +358,29 @@ export default function Dashboard() {
 
       {!loading && !err && (
         <>
-          {/* KPI Cards - exactly 5 per row on lg+ */}
-          <Grid container spacing={3} sx={{ mb: 4 }} columns={{ xs: 12, md: 12, lg: 15 }}>
-            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+          {/* KPI Cards — exactly 5 per row on lg+ */}
+          <Grid container spacing={3} sx={{ mb: 4 }} columns={{ xs: 12, md: 12, lg: 20 }}>
+            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
               <Card title="Net Worth" value={`${fmt0(netWorth)} ${baseCcy}`} />
             </Grid>
-            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
               <Card title="Investments (MV)" value={`${fmt0(investMV)} ${baseCcy}`} />
             </Grid>
-            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
               <Card title="Investments (Cost)" value={`${fmt0(investCost)} ${baseCcy}`} />
             </Grid>
-            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
+            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
               <Card title="Cash Balance" value={`${fmt0(cash)} ${baseCcy}`} />
             </Grid>
-            <Grid size={{ xs: 12, md: 6, lg: 3 }}>
-              {/* your extra card */}
-            </Grid>
+            <Grid size={{ xs: 12, md: 6, lg: 4 }}>
               <Card
                 title="Unrealized P&L"
-                value={`${unrealized >= 0 ? '+' : ''}${fmt0(unrealized)} ${baseCcy}`}
+                value={`${unrealized >= 0 ? "+" : ""}${fmt0(unrealized)} ${baseCcy}`}
                 color={unrealized >= 0 ? "success.main" : "error.main"}
               />
             </Grid>
+          </Grid>
+
 {/* Row 1 — three equal charts */}
 <Grid container spacing={3} sx={{ mb: 4, width: '100%' }}>
   {/* Top Holdings FIRST */}

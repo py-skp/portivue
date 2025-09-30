@@ -14,19 +14,19 @@ import AssetClassesCard from "./AssetClassesCard";
 import AssetSubclassesCard from "./AssetSubclassesCard";
 import SectorsCard from "./SectorsCard";
 import BaseCurrencyCard from "./BaseCurrencyCard";
+import RefreshStatusCard from "./RefreshStatusCard";   // 🔹 NEW card
 
 type TabKey =
-  // | "security"
   | "fx"
   | "accounts"
   | "brokers"
   | "assetClasses"
   | "assetSubclasses"
   | "sectors"
-  | "baseCurrency";
+  | "baseCurrency"
+  | "refreshStatus";  // 🔹 NEW tab key
 
 const TABS: { key: TabKey; label: string; element: React.ReactNode }[] = [
-  // { key: "security",        label: "Security",          element: <SettingsSecurityCard /> },
   { key: "fx",              label: "FX Rates",          element: <FxRatesToolsCard /> },
   { key: "accounts",        label: "Accounts",          element: <AccountsCard /> },
   { key: "brokers",         label: "Brokers",           element: <BrokersCard /> },
@@ -34,6 +34,7 @@ const TABS: { key: TabKey; label: string; element: React.ReactNode }[] = [
   { key: "assetSubclasses", label: "Asset Subclasses",  element: <AssetSubclassesCard /> },
   { key: "sectors",         label: "Sectors",           element: <SectorsCard /> },
   { key: "baseCurrency",    label: "Base Currency",     element: <BaseCurrencyCard /> },
+  { key: "refreshStatus",   label: "Refresh Status",    element: <RefreshStatusCard /> }, // 🔹 NEW
 ];
 
 function a11yProps(index: number) {
@@ -82,7 +83,7 @@ export default function SettingsPage() {
             id={`settings-tabpanel-${i}`}
             aria-labelledby={`settings-tab-${i}`}
           >
-            {value === i && <Box sx={{}}>{t.element}</Box>}
+            {value === i && <Box>{t.element}</Box>}
           </div>
         ))}
       </Box>

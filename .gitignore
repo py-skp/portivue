@@ -1,22 +1,36 @@
+# ----------------------
 # Python
+# ----------------------
 __pycache__/
 *.pyc
 .venv/
-.env
-.env.*
 *.sqlite*
 
-# Node
+# Ignore all env files by default
+.env
+.env.*
+
+# But allow committed sample env files
+!.env.example
+!*/.env.*.example
+
+# ----------------------
+# Node / Next.js
+# ----------------------
 node_modules/
 .next/
 out/
 *.log
 
+# ----------------------
 # Docker
+# ----------------------
 *.pid
 *.tar
 
-# OS/editor
+# ----------------------
+# OS / Editor junk
+# ----------------------
 .DS_Store
 .idea/
 .vscode/

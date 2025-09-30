@@ -1,6 +1,14 @@
 // lib/api.ts
-export const API_BASE = (process.env.NEXT_PUBLIC_API ?? "/api").replace(/\/$/, "");
 
+// --- Resolve API base safely -----------------------------------------------
+const raw = process.env.NEXT_PUBLIC_API;
+// Treat "", "undefined", and "null" as unset
+const sanitized = !raw || raw === "undefined" || raw === "null" ? "/api" : raw;
+
+// trim any trailing slash(es)
+export const API_BASE = sanitized.replace(/\/+$/, "");
+
+// ---------------------------------------------------------------------------
 type ApiInit = RequestInit & {
   timeoutMs?: number;   // optional request timeout
   retryOnce?: boolean;  // retry once on transient failure
@@ -14,6 +22,7 @@ async function doFetch(url: string, init: ApiInit): Promise<Response> {
 
   // Only set JSON content-type if we’re sending a body
   const mergedHeaders: HeadersInit = {
+    Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
     ...(headers || {}),
     ...(body != null ? { "Content-Type": "application/json" } : {}),
   };
@@ -65,7 +74,7 @@ export async function api<T = unknown>(path: string, init: ApiInit = {}): Promis
       typeof body === "string"
         ? body
         : (body as any)?.detail || JSON.stringify(body) || `HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new Error(`${url} → ${msg}`);
   }
 
   return (await parse()) as T;
@@ -105,4 +114,20 @@ export function patch<TResp = unknown, TBody = unknown>(
   init: Omit<ApiInit, "method" | "body"> = {}
 ) {
   return api<TResp>(path, { ...init, method: "PATCH", body: JSON.stringify(body) });
+}
+
+/* ---------------------------
+   SWR-friendly fetchers
+   --------------------------- */
+
+export function getJSON<T = unknown>(path: string) {
+  return get<T>(path);
+}
+
+export async function getText(path: string) {
+  // If you ever need plain text responses
+  const url = `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+  const res = await doFetch(url, { method: "GET" });
+  if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
+  return res.text();
 }

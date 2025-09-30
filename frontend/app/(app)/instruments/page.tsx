@@ -101,43 +101,66 @@ export default function InstrumentsListPage() {
     }
   }
 
-  async function loadMeta() {
-    setMetaLoading(true);
-    setAddErr(null);
-    const toList = (raw: any, key: "code" | "name") => {
-      if (Array.isArray(raw)) {
-        return raw.map((x: any) => (typeof x === "string" ? { [key]: x } : { [key]: x?.name ?? x?.label ?? x?.code ?? String(x) }));
-      }
-      if (typeof raw === "string") {
-        try {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) return parsed.map((x: any) => (typeof x === "string" ? { [key]: x } : { [key]: x?.name ?? x?.label ?? x?.code ?? String(x) }));
-        } catch {}
-        return raw.split(/[\n,|]+/).map((s: string) => s.trim()).filter(Boolean).map((s: string) => ({ [key]: s }));
-      }
-      return [];
-    };
-    try {
-      const [rc, rAc, rSub, rSec] = await Promise.all([
-        api<any[]>("/lookups/currencies"),
-        api<any[]>("/asset-classes"),
-        api<any[]>("/asset-subclasses"),
-        api<any[]>("/sectors"),
-      ]);
-      const uniqBy = <T extends { [k: string]: string }>(arr: T[], k: keyof T) =>
-        Array.from(new Map(arr.map(o => [String(o[k]).toLowerCase(), o])).values());
-      const cNorm = uniqBy(toList(rc, "code") as CurrencyOpt[], "code").sort((a, b) => a.code.localeCompare(b.code));
-      const aNorm = uniqBy(toList(rAc, "name") as AssetClassOpt[], "name").sort((a, b) => a.name.localeCompare(b.name));
-      const subNorm = uniqBy(toList(rSub, "name") as AssetSubclassOpt[], "name").sort((a, b) => a.name.localeCompare(b.name));
-      const secNorm = uniqBy(toList(rSec, "name") as SectorOpt[], "name").sort((a, b) => a.name.localeCompare(b.name));
-      setCurrencies(cNorm); setAssetClasses(aNorm); setAssetSubclasses(subNorm); setSectors(secNorm);
-      setAddForm(prev => ({ ...prev, currency_code: prev.currency_code || cNorm[0]?.code || "" }));
-    } catch (e: any) {
-      setAddErr(e.message || String(e));
-    } finally {
-      setMetaLoading(false);
-    }
+async function loadMeta() {
+  setMetaLoading(true);
+  setAddErr(null);
+
+  try {
+    const [rc, rAc, rSub, rSec] = await Promise.all([
+      api<any[]>("/lookups/currencies"),
+      api<any[]>("/asset-classes"),
+      api<any[]>("/asset-subclasses"),
+      api<any[]>("/sectors"),
+    ]);
+
+    // --- helpers ---
+    const uniqBy = <T extends Record<string, string>>(arr: T[], k: keyof T) =>
+      Array.from(new Map(arr.map(o => [String(o[k]).toLowerCase(), o])).values());
+
+    // Keep BOTH code and name for currencies
+    const cRaw: CurrencyOpt[] = Array.isArray(rc)
+      ? rc.map((x: any) => {
+          if (typeof x === "string") return { code: x };
+          // accept {code,name} or {label,code} or {name}
+          return {
+            code: x?.code ?? String(x?.label ?? x?.name ?? "").toUpperCase(),
+            name: x?.name ?? (x?.label && x?.label !== x?.code ? x.label : undefined),
+          } as CurrencyOpt;
+        })
+      : [];
+
+    const cNorm = uniqBy(cRaw.filter(c => !!c.code), "code")
+      .sort((a, b) => a.code.localeCompare(b.code));
+
+    // Prefer USD if available; otherwise first code
+    const preferredCurrency =
+      cNorm.find(c => c.code === "USD")?.code ?? cNorm[0]?.code ?? "";
+
+    // Asset classes / subclasses / sectors keep 'name'
+    const toNames = (raw: any[]): { name: string }[] =>
+      Array.isArray(raw)
+        ? raw.map((x: any) => ({ name: typeof x === "string" ? x : (x?.name ?? x?.label ?? String(x)) }))
+        : [];
+
+    const aNorm = uniqBy(toNames(rAc), "name").sort((a, b) => a.name.localeCompare(b.name));
+    const subNorm = uniqBy(toNames(rSub), "name").sort((a, b) => a.name.localeCompare(b.name));
+    const secNorm = uniqBy(toNames(rSec), "name").sort((a, b) => a.name.localeCompare(b.name));
+
+    setCurrencies(cNorm);
+    setAssetClasses(aNorm);
+    setAssetSubclasses(subNorm);
+    setSectors(secNorm);
+
+    setAddForm(prev => ({
+      ...prev,
+      currency_code: prev.currency_code || preferredCurrency,
+    }));
+  } catch (e: any) {
+    setAddErr(e.message || String(e));
+  } finally {
+    setMetaLoading(false);
   }
+}
 
   useEffect(() => {
     const ctrl = new AbortController();

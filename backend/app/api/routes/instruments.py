@@ -20,6 +20,7 @@ from ...services.instruments import fetch_from_yahoo
 from ...services.yf_client import fetch_profile_and_price
 from ...services.price_refresher import refresh_all_yahoo_prices
 from yahooquery import search as yq_search
+from app.services.price_refresher import refresh_all_prices
 
 
 logger = logging.getLogger(__name__)
@@ -253,10 +254,10 @@ def upsert_from_yahoo(
     session: Session = Depends(get_session),
 ):
     """
-    Return existing PUBLIC yahoo instrument (if present) or create it once.
+    Return existing PUBLIC Yahoo instrument (if present) or create it once.
     Public rows have owner_user_id = NULL and are shared by all users.
     """
-    sym = symbol.upper().strip()
+    sym = symbol.strip().upper()
 
     existing = session.exec(
         select(Instrument).where(
@@ -270,17 +271,24 @@ def upsert_from_yahoo(
     if not data:
         raise HTTPException(404, "Symbol not found on Yahoo")
 
+    # --- Currency normalization for LSE listings ---
+    ccy = (data.get("currency_code") or "").upper()
+    if sym.endswith(".L"):
+        ccy = "GBp"     # always store pence for London tickers
+    elif ccy == "GBX":
+        ccy = "GBp"
+
     inst = Instrument(
         symbol=sym,
         name=data["name"],
         sector=data.get("sector"),
-        currency_code=data["currency_code"],
+        currency_code=ccy,
         asset_class=data.get("asset_class"),
         asset_subclass=data.get("asset_subclass"),
         country=data.get("country"),
         latest_price=data.get("latest_price"),
         latest_price_at=data.get("latest_price_at"),
-        data_source="yahoo",     # PUBLIC row
+        data_source="yahoo",   # PUBLIC row
         # owner_user_id stays NULL
     )
     session.add(inst)
@@ -352,21 +360,28 @@ def add_manual_price(
 @router.post("/refresh_all_prices")
 def refresh_all_prices_endpoint(
     limit: int = Query(0, ge=0, description="Max instruments to refresh (0 = all)"),
-    timeout_sec: int = Query(25, ge=1, le=55, description="Soft time budget in seconds"),
+    timeout_sec: int = Query(90, ge=1, le=180, description="Soft time budget in seconds"),
+    provider: str = Query(  # <-- NEW
+        "auto",
+        pattern="^(auto|alphavantage|stooq)$",
+        description="Price data provider: auto | alphavantage | stooq",
+    ),
     session: Session = Depends(get_session),
 ):
     """
-    Refresh Yahoo prices with a soft time budget to avoid proxy timeouts.
-    Returns partial results if time budget is hit.
+    Refresh instrument prices via selected provider.
+    - provider: auto (AlphaVantage if key set, else Stooq), alphavantage, or stooq
+    - Stops early if time budget is exceeded.
     """
     try:
-        result = refresh_all_yahoo_prices(
+        return refresh_all_prices(
             session,
             limit=limit,
             time_budget_sec=timeout_sec,
+            provider=provider,              
             logger=logger,
         )
-        return result
     except Exception as e:
         logger.exception("refresh_all_prices failed")
         raise HTTPException(status_code=500, detail=f"refresh_all_prices failed: {e}")
+    

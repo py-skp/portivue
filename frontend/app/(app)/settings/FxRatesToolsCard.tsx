@@ -6,8 +6,10 @@ import {
   Alert, CircularProgress, Stack, Divider, Chip, Collapse, Link
 } from "@mui/material";
 import { api } from "@/lib/api";
+import { API_BASE } from "@/lib/api";
+const API = API_BASE; // resolves to "/api" if unset, no trailing slash
 
-const API = process.env.NEXT_PUBLIC_API!;
+// const API = process.env.NEXT_PUBLIC_API!;
 
 type FetchForDateResp = { date: string; count: number };
 type RefreshResp      = { base: string; date: string; count: number };

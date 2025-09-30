@@ -6,7 +6,16 @@ import {
   Alert, CircularProgress, Stack, MenuItem, Divider
 } from "@mui/material";
 
-const API = process.env.NEXT_PUBLIC_API!;
+import { API_BASE } from "@/lib/api";
+const API = API_BASE;
+
+// ✅ NEW: 2-decimal, comma-separated formatter
+const nf2 = new Intl.NumberFormat(undefined, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const fmt2 = (v: unknown) => nf2.format(Number(v ?? 0));
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
 type Currency = { code: string; name?: string };
 
@@ -38,21 +47,18 @@ export default function AccountsCard() {
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || r.statusText);
 
-    // normalize to {code, name}
-    const list: Currency[] = (Array.isArray(data) ? data : []).map((c: any) =>
-      typeof c === "string" ? { code: c } : { code: c.code ?? c.Code ?? "", name: c.name ?? c.Name }
-    ).filter(c => c.code);
+    const list: Currency[] = (Array.isArray(data) ? data : [])
+      .map((c: any) =>
+        typeof c === "string" ? { code: c } : { code: c.code ?? c.Code ?? "", name: c.name ?? c.Name }
+      )
+      .filter(c => c.code);
 
     setCurrencies(list);
 
-if (list.length && !list.find(c => c.code === form.currency_code)) {
-  const fallback =
-    list.find(c => c.code === "USD")?.code   // prefer USD if present
-    ?? list[0]?.code                         // else first item if it exists
-    ?? "";                                   // else empty string (safe default)
-
-  setForm(f => ({ ...f, currency_code: fallback }));
-}
+    if (list.length && !list.find(c => c.code === form.currency_code)) {
+      const fallback = list.find(c => c.code === "USD")?.code ?? list[0]?.code ?? "";
+      setForm(f => ({ ...f, currency_code: fallback }));
+    }
   }
 
   async function loadAll() {
@@ -80,9 +86,9 @@ if (list.length && !list.find(c => c.code === form.currency_code)) {
         credentials: "include",
         body: JSON.stringify({
           ...form,
-          // keep clean payload
           name: form.name.trim(),
-          balance: Number(form.balance) || 0,
+          // ✅ ensure we send a clean 2-decimal number
+          balance: round2(form.balance),
         }),
       });
       const data = await r.json();
@@ -120,11 +126,7 @@ if (list.length && !list.find(c => c.code === form.currency_code)) {
             value={form.currency_code}
             onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
             disabled={loadingMeta || currencies.length === 0}
-            helperText={
-              currencies.length === 0
-                ? "No currencies available — seed /lookups/currencies."
-                : undefined
-            }
+            helperText={currencies.length === 0 ? "No currencies available — seed /lookups/currencies." : undefined}
             sx={{ minWidth: 180 }}
           >
             {currencies.length === 0 ? (
@@ -157,6 +159,8 @@ if (list.length && !list.find(c => c.code === form.currency_code)) {
             size="small"
             value={form.balance}
             onChange={(e) => setForm({ ...form, balance: Number(e.target.value) })}
+            onBlur={() => setForm(f => ({ ...f, balance: round2(f.balance) }))} // ✅ normalize to 2 decimals on blur
+            inputProps={{ step: "0.01" }}
             sx={{ width: 140 }}
           />
 
@@ -179,7 +183,8 @@ if (list.length && !list.find(c => c.code === form.currency_code)) {
           {accounts.map(acc => (
             <Paper key={acc.id} variant="outlined" sx={{ p:1, display:"flex", justifyContent:"space-between" }}>
               <span><b>{acc.name}</b> — {acc.currency_code} ({acc.type})</span>
-              <span>{acc.balance ?? 0}</span>
+              {/* ✅ Use formatted number */}
+              <span>{fmt2(acc.balance)}</span>
             </Paper>
           ))}
         </Stack>

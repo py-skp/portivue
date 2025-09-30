@@ -4,7 +4,7 @@
 // Dev:  BACKEND_ORIGIN=http://localhost:8000
 // Prod: BACKEND_ORIGIN=http://fastapi:8000   (docker compose / k8s service)
 //       or https://api.yourdomain.com        (if you run Next as a Node server and want it to proxy)
-const API_ORIGIN = process.env.BACKEND_ORIGIN || "http://localhost:8000";
+const API_ORIGIN = process.env.BACKEND_ORIGIN || "http://backend:8000";
 
 const nextConfig = {
   reactStrictMode: true,
