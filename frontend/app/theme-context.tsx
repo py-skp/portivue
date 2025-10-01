@@ -23,13 +23,10 @@ export default function ThemeModeProvider({ children }: { children: React.ReactN
   // read persisted pref (or system)
   useEffect(() => {
     const saved = (localStorage.getItem(STORAGE_KEY) as Mode | null) || null;
-    if (saved === "light" || saved === "dark") setMode(saved);
-    else {
-      const prefersDark =
-        typeof window !== "undefined" &&
-        window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setMode(prefersDark ? "dark" : "light");
+    if (saved === "light" || saved === "dark") {
+      setMode(saved);
+    } else {
+      setMode("light"); // force light on first visit
     }
   }, []);
 

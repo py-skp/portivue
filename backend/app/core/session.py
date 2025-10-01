@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
+import json
 
 from itsdangerous import URLSafeSerializer, BadSignature
 from fastapi import Request, HTTPException, Response
@@ -8,9 +9,26 @@ from fastapi import Request, HTTPException, Response
 from app.core.config import settings
 
 # ------------------------------------------------------------------
-# Serializer (renamed salt to Portivue)
+# ASCII-safe JSON serializer for itsdangerous
 # ------------------------------------------------------------------
-_s = URLSafeSerializer(settings.SESSION_SECRET, salt="portivue.session")
+class _AsciiJSON:
+    @staticmethod
+    def dumps(obj) -> str:
+        # ensure_ascii=True guarantees only ASCII characters in the JSON payload
+        return json.dumps(obj, separators=(",", ":"), ensure_ascii=True)
+
+    @staticmethod
+    def loads(s: str):
+        return json.loads(s)
+
+# ------------------------------------------------------------------
+# Serializer (fixed salt)
+# ------------------------------------------------------------------
+_s = URLSafeSerializer(
+    secret_key=str(settings.SESSION_SECRET),
+    salt="portivue.session",
+    serializer=_AsciiJSON,   # <— force ASCII-safe JSON
+)
 
 # ------------------------------------------------------------------
 # Time helpers
@@ -19,7 +37,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 def _short_max_age() -> int:
-    # seconds
     try:
         return int(getattr(settings, "SESSION_SHORT_MAX_AGE", 60 * 60 * 12))  # 12h default
     except Exception:
@@ -27,7 +44,7 @@ def _short_max_age() -> int:
 
 def _remember_days_default() -> int:
     try:
-        return int(getattr(settings, "SESSION_REMEMBER_DAYS", 14))  # 14 days default
+        return int(getattr(settings, "SESSION_REMEMBER_DAYS", 14))
     except Exception:
         return 14
 
@@ -42,11 +59,6 @@ def _is_localhost_dev() -> bool:
     return env in {"dev", "development", "local"}
 
 def _cookie_kwargs(remember: bool) -> dict:
-    """
-    Compute safe cookie attributes depending on environment.
-    In dev (localhost): host-only cookie, SameSite=Lax, Secure=False, no Domain.
-    In prod: use settings as-is.
-    """
     max_age = (
         int(getattr(settings, "SESSION_REMEMBER_DAYS", _remember_days_default())) * 24 * 3600
         if remember
@@ -59,11 +71,10 @@ def _cookie_kwargs(remember: bool) -> dict:
             secure=False,          # HTTP on localhost
             samesite="lax",
             path="/",
-            domain=None,           # host-only cookie for localhost
+            domain=None,           # host-only cookie
             max_age=max_age,
         )
 
-    # Production / non-localhost
     return dict(
         httponly=True,
         secure=bool(getattr(settings, "SESSION_COOKIE_SECURE", True)),
@@ -81,10 +92,6 @@ def create_session_cookie(
     twofa_ok: bool,
     remember_days: int | None = None,
 ) -> str:
-    """
-    Build a signed session token with explicit exp (unix seconds).
-    If remember_days is None/0, use short max-age (e.g., 12h).
-    """
     now = _now()
     if remember_days and remember_days > 0:
         exp = now + timedelta(days=remember_days)
@@ -101,9 +108,6 @@ def create_session_cookie(
     return _s.dumps(payload)
 
 def load_session_cookie(token: str) -> dict:
-    """
-    Verify signature, then enforce our own exp.
-    """
     try:
         payload = _s.loads(token)
     except BadSignature:
@@ -118,10 +122,8 @@ def load_session_cookie(token: str) -> dict:
 # Cookie set/clear
 # ------------------------------------------------------------------
 def set_cookie(response: Response, value: str, remember: bool = False):
-    """
-    Set the session cookie with environment-appropriate attributes.
-    """
     kwargs = _cookie_kwargs(remember=remember)
+    # Starlette expects a str; our value is ASCII-only because of _AsciiJSON
     response.set_cookie(
         key=getattr(settings, "SESSION_COOKIE_NAME", "pv_session"),
         value=value,
@@ -129,10 +131,6 @@ def set_cookie(response: Response, value: str, remember: bool = False):
     )
 
 def clear_cookie(response: Response) -> None:
-    """
-    Clear the session cookie (mirror attrs used when setting, where applicable).
-    """
-    # Use same env logic to ensure browser matches the cookie to delete
     if _is_localhost_dev():
         response.delete_cookie(
             key=getattr(settings, "SESSION_COOKIE_NAME", "pv_session"),
