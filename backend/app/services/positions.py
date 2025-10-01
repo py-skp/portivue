@@ -13,7 +13,6 @@ from app.models.user import User
 from app.core.settings_svc import get_or_create_settings
 from app.services.fx_resolver import fx_rate_on
 
-# optional tenant support
 try:
     from app.core.tenant import TenantContext
 except Exception:
@@ -31,6 +30,16 @@ def _safe_div(a: float, b: float) -> float:
     return a / b if b else 0.0
 
 
+def _norm_ccy(code: Optional[str]) -> str:
+    """
+    Preserve 'GBp' exactly; otherwise uppercase 3-letter codes.
+    """
+    if not code:
+        return ""
+    s = code.strip()
+    return "GBp" if s == "GBp" else s.upper()
+
+
 def compute_positions(
     session: Session,
     base_ccy_override: Optional[str] = None,
@@ -46,9 +55,9 @@ def compute_positions(
     if not user:
         return []
 
-    # 0) base currency (from settings, but user-specific if you’ve extended settings per user)
+    # 0) base currency (user's settings; allow override)
     settings = get_or_create_settings(session, user=user)
-    base_ccy = (base_ccy_override or settings.base_currency_code or "USD").upper()
+    base_ccy = _norm_ccy(base_ccy_override or settings.base_currency_code or "USD")
 
     # 1) load this user's accounts
     accounts = session.exec(
@@ -59,7 +68,7 @@ def compute_positions(
     acc_map: Dict[int, Account] = {a.id: a for a in accounts}
     acc_ids = list(acc_map.keys())
 
-    # 2) load this user's activities (only from their accounts)
+    # 2) user's activities (restricted to their accounts)
     acts = session.exec(
         select(Activity)
         .where(Activity.account_id.in_(acc_ids))
@@ -90,7 +99,7 @@ def compute_positions(
         q = float(a.quantity or 0.0)
         p = float(a.unit_price or 0.0)
         fee = float(a.fee or 0.0)
-        ccy = (a.currency_code or "").upper()
+        ccy = _norm_ccy(a.currency_code)
         trade_total = q * p + fee
 
         r = fx_rate_on(session, ccy, base_ccy, a.date, cache=fx_cache) or 0.0
@@ -127,6 +136,7 @@ def compute_positions(
 
         inst = inst_map.get(instrument_id)
         acc = acc_map.get(account_id)
+
         if not inst:
             rows.append({
                 "account_id": account_id,
@@ -150,8 +160,9 @@ def compute_positions(
             })
             continue
 
-        inst_ccy = (inst.currency_code or "").upper()
+        inst_ccy = _norm_ccy(inst.currency_code)
         last_ccy = float(inst.latest_price or 0.0)
+
         fx_today = fx_rate_on(session, inst_ccy, base_ccy, today, cache=fx_cache) or 0.0
         last_base = last_ccy * fx_today
 
