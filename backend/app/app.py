@@ -34,6 +34,7 @@ from app.api.routes.sectors import router as sectors_router
 from app.api.routes.currencies import router as currencies_router
 from app.api.routes.scheduler_status import router as scheduler_status_router
 from app.api.routes.refresh_status import router as refresh_status_router
+from app.api.routes.auth_email import router as auth_email_router
 
 from app.admin.admin import mount_admin
 
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(scheduler_status_router)
     app.include_router(refresh_status_router)
+    app.include_router(auth_email_router)
 
     # Auth
     app.include_router(auth_google_router)

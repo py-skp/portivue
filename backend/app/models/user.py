@@ -1,8 +1,6 @@
-# app/models/user.py
-from __future__ import annotations
-from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field
+from datetime import datetime
 
 class User(SQLModel, table=True):
     __tablename__ = "user"
@@ -14,9 +12,12 @@ class User(SQLModel, table=True):
     is_active: bool = True
     is_admin: bool = False
 
+    # NEW (nullable so Google-only users still work)
+    hashed_password: Optional[str] = Field(default=None, nullable=True)
+
     # 2FA
     totp_enabled: bool = False
-    totp_secret: Optional[str] = None       # store encrypted at-rest in prod
+    totp_secret: Optional[str] = None
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

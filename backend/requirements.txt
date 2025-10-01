@@ -22,3 +22,6 @@ qrcode
 passlib
 APScheduler==3.10.4
 gunicorn==21.2.0
+passlib
+email-validator
+pydantic[email]>=2.4
