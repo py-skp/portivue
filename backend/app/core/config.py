@@ -8,53 +8,44 @@ from pydantic import field_validator
 
 
 class Settings(BaseSettings):
-    # App
+    # --- App basics ---
     APP_NAME: str = "Finlytics"
 
     TENANCY_MODE: Literal["per_user", "per_org"] = "per_user"
-    # per_user  → each user has a personal org, sees only their data (SaaS)
-    # per_org   → users in the same org see the same data (enterprise)
 
     # --- Database (required) ---
-    # Examples:
-    #   DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/finlytics
-    #   DATABASE_URL=sqlite:///./portfolio.db
     database_url: str = Field(..., alias="DATABASE_URL")
 
-    # --- Frontend URL (used by auth redirects, CORS, etc.) ---
-    FRONTEND_URL: str = "http://localhost:3000"
+    # --- Frontend URL (auth redirects, CORS, etc.) ---
+    FRONTEND_URL: str = Field(..., alias="FRONTEND_URL")
 
     # --- Sessions / Cookies ---
-    SESSION_SECRET: str = Field("dev-session-secret", alias="SESSION_SECRET")
-    SESSION_COOKIE_NAME: str = "finlytics_session"
-    SESSION_COOKIE_SECURE: bool = False                 # True in production (HTTPS)
-    SESSION_COOKIE_DOMAIN: Optional[str] = None         # e.g. ".yourdomain.com"
-    SESSION_COOKIE_SAMESITE: str = "lax"                # "lax" | "strict" | "none"
-    SESSION_COOKIE_DOMAIN: str | None = "localhost"   # 👈 add/ensure this in .env for dev
+    SESSION_SECRET: str = Field(..., alias="SESSION_SECRET")
+    SESSION_COOKIE_NAME: str = Field("finlytics_session", alias="SESSION_COOKIE_NAME")
+    SESSION_COOKIE_SECURE: bool = Field(False, alias="SESSION_COOKIE_SECURE")
+    SESSION_COOKIE_DOMAIN: Optional[str] = Field(None, alias="SESSION_COOKIE_DOMAIN")
+    SESSION_COOKIE_SAMESITE: str = Field("lax", alias="SESSION_COOKIE_SAMESITE")
 
     # Session lifetimes
-    SESSION_SHORT_MAX_AGE: int = 60 * 60 * 12           # 12 hours
-    SESSION_REMEMBER_DAYS: int = 14                     # 14 days
+    SESSION_SHORT_MAX_AGE: int = Field(60 * 60 * 12, alias="SESSION_SHORT_MAX_AGE")  # 12h
+    SESSION_REMEMBER_DAYS: int = Field(14, alias="SESSION_REMEMBER_DAYS")
 
-    # --- Google OAuth (SSO) ---
-    GOOGLE_CLIENT_ID: Optional[str] = None
-    GOOGLE_CLIENT_SECRET: Optional[str] = None
-    # Must match the one registered in Google console
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
+    # --- Google OAuth ---
+    GOOGLE_CLIENT_ID: Optional[str] = Field(None, alias="GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET: Optional[str] = Field(None, alias="GOOGLE_CLIENT_SECRET")
+    GOOGLE_REDIRECT_URI: Optional[str] = Field(None, alias="GOOGLE_REDIRECT_URI")
 
     # --- CORS ---
-    # You can also set CORS_ORIGINS as a JSON list in .env, e.g. '["http://localhost:3000"]'
-    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:3000"])
-    # Or provide CSV via CORS_ORIGINS_CSV=http://a,http://b
-    CORS_ORIGINS_CSV: Optional[str] = None
-    CORS_ALLOW_CREDENTIALS: bool = True
+    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:3000"], alias="CORS_ORIGINS")
+    CORS_ORIGINS_CSV: Optional[str] = Field(None, alias="CORS_ORIGINS_CSV")
+    CORS_ALLOW_CREDENTIALS: bool = Field(True, alias="CORS_ALLOW_CREDENTIALS")
 
     # --- Admin (legacy/dev) ---
-    ADMIN_USER: str = "admin"
-    ADMIN_PASS: str = "admin123"
-    ADMIN_SESSION_SECRET: str = "dev-secret"
+    ADMIN_USER: str = Field("admin", alias="ADMIN_USER")
+    ADMIN_PASS: str = Field("admin123", alias="ADMIN_PASS")
+    ADMIN_SESSION_SECRET: str = Field("dev-secret", alias="ADMIN_SESSION_SECRET")
 
-    # --- FX API (Open Exchange Rates) ---
+    # --- FX API ---
     oxr_app_id: Optional[str] = Field(default=None, alias="OXR_APP_ID")
 
     model_config = SettingsConfigDict(
@@ -69,32 +60,22 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _normalize_cors(cls, v, info):
-        # If CSV helper provided, prefer that
         csv = None
-        # Access sibling field value if already parsed
         if hasattr(info, "data") and isinstance(info.data, dict):
             csv = info.data.get("CORS_ORIGINS_CSV")
-        # If running in pre-mode and env injection happens differently, also
-        # handle the case where v is None but CORS_ORIGINS_CSV present in env.
-        if not csv:
-            # no-op; v might already be list/string from env/defaults
-            pass
 
         if csv:
-            parts = [p.strip() for p in str(csv).split(",") if p.strip()]
-            return parts or (v if isinstance(v, list) else [v] if isinstance(v, str) else ["http://localhost:3000"])
+            return [p.strip() for p in str(csv).split(",") if p.strip()]
 
-        # If env provided a single string (not JSON array), coerce to list
         if isinstance(v, str):
             return [v]
         return v
 
-    # Normalize common postgres scheme
+    # Normalize postgres scheme
     @field_validator("database_url", mode="before")
     @classmethod
     def _normalize_db_url(cls, v: str):
         if isinstance(v, str) and v.startswith("postgres://"):
-            # SQLAlchemy prefers postgresql:// or postgresql+psycopg://
             return v.replace("postgres://", "postgresql://", 1)
         return v
 

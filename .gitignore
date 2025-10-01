@@ -27,6 +27,8 @@ out/
 # ----------------------
 *.pid
 *.tar
+docker-compose*.yml
+!docker-compose.example.yml
 
 # ----------------------
 # OS / Editor junk
