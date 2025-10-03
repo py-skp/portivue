@@ -115,7 +115,7 @@ async function loadMeta() {
 
     // --- helpers ---
     const uniqBy = <T extends Record<string, string>>(arr: T[], k: keyof T) =>
-      Array.from(new Map(arr.map(o => [String(o[k]).toLowerCase(), o])).values());
+      Array.from(new Map(arr.map(o => [String(o[k]), o])).values());
 
     // Keep BOTH code and name for currencies
     const cRaw: CurrencyOpt[] = Array.isArray(rc)
