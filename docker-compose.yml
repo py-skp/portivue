@@ -1,54 +1,33 @@
 version: "3.9"
 
 services:
-  db:
-    image: postgres:16
-    container_name: protivue_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: protivue
-      POSTGRES_PASSWORD: protivue
-      POSTGRES_DB: protivue
-    ports:
-      - "5432:5432"
-    volumes:
-      - dbdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U protivue -d protivue"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: protivue_backend
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     env_file:
-      - ./backend/.env.backend.local
+      - .env
     ports:
-      - "8000:8000"
+      - "${PORT_BACKEND}:${PORT_BACKEND}"
     environment:
       # --- DB / App ---
-      DATABASE_URL: postgresql+psycopg://protivue:protivue@db:5432/protivue
-      DB_HOST: db
-      DB_PORT: 5432
-      PORT: 8000
+      DATABASE_URL: ${DATABASE_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      PORT: ${PORT_BACKEND}
 
       # Web-only pod: disable scheduler here
       SCHEDULER_ENABLED: "false"
 
-      # Gunicorn knobs (only relevant if your Dockerfile CMD runs gunicorn)
+      # Gunicorn knobs
       WEB_CONCURRENCY: "2"
       WEB_THREADS: "1"
       GUNICORN_TIMEOUT: "60"
 
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      test: [ "CMD", "curl", "-fsS", "http://localhost:${PORT_BACKEND}/health" ]
       interval: 20s
       timeout: 5s
       retries: 10
@@ -59,61 +38,41 @@ services:
       dockerfile: Dockerfile
     container_name: protivue_backend_scheduler
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     ports:
-      - "8001:8000"   # so you can curl /health and /_scheduler_status
+      - "${PORT_SCHEDULER}:${PORT_BACKEND}"
     env_file:
-      - ./backend/.env.backend.local
+      - .env
     environment:
       # --- Core app ---
-      DATABASE_URL: postgresql+psycopg://protivue:protivue@db:5432/protivue
-      PORT: 8000
+      DATABASE_URL: ${DATABASE_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      PORT: ${PORT_BACKEND}
       TZ: "UTC"
 
       # Enable the in-process APScheduler
       SCHEDULER_ENABLED: "true"
 
-      # --- Price refresher provider ---
+      # --- Price refresher Tuning ---
       PRICE_REFRESH_PROVIDER: "auto"
       ENABLE_YFINANCE_FALLBACK: "0"
-
-      # --- Refresher tuning ---
       REFRESH_BATCH_SIZE: "5"
-      REFRESH_TIME_BUDGET_SEC: "90"   # ⬅️ increased time budget
+      REFRESH_TIME_BUDGET_SEC: "90"
       REFRESH_PER_CALL_SLEEP_SEC: "0.15"
-
-      # --- Cron overrides (back to 2–4 runs/day) ---
-      YF_REFRESH_CRON_1: "0 10 * * 1-5"                     # 10:00 London
-      YF_REFRESH_CRON_2: "30 10 * * 1-5 America/New_York"    # 10:30 New York
-      YF_REFRESH_CRON_3: "30 17 * * 1-5"                     # 17:30 London
-      YF_REFRESH_CRON_4: "0 17 * * 1-5 America/New_York"     # 17:00 New York
-
-      FX_REFRESH_CRON_1: "0 10 * * 1-5"                      # 10:00 London
-      FX_REFRESH_CRON_2: "0 17 * * 1-5 America/New_York"     # 17:00 New York
-
-      # Remove test-only overrides
-      # SCHEDULER_TEST_EVERY_MIN: "2"
-      # SCHEDULER_RUN_ON_START: "1"
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        BACKEND_ORIGIN: http://backend:8000
+        BACKEND_ORIGIN: ${INTERNAL_BACKEND_ORIGIN}
         NEXT_PUBLIC_BACKEND_ORIGIN: ${NEXT_PUBLIC_BACKEND_ORIGIN}
         NEXT_PUBLIC_SCHEDULER_API: ${NEXT_PUBLIC_SCHEDULER_API}
         NEXT_PUBLIC_API: ${NEXT_PUBLIC_API}
-    env_file:
-      - ./frontend/.env
     container_name: protivue_frontend
     restart: unless-stopped
-    depends_on:
-      - backend
     ports:
-      - "3000:3000"
-
-volumes:
-  dbdata:
+      - "${PORT_FRONTEND}:${PORT_FRONTEND}"
+    environment:
+      PORT: ${PORT_FRONTEND}
+      BACKEND_ORIGIN: ${INTERNAL_BACKEND_ORIGIN}
