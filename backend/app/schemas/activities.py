@@ -24,13 +24,17 @@ from pydantic import BaseModel
 class ActivityCreate(BaseModel):
     type: Literal["Buy", "Sell", "Dividend", "Interest", "Fee"]
     account_id: int
-    instrument_id: int
+    instrument_id: Optional[int] = None  # Optional for Fee/Interest
     broker_id: Optional[int] = None 
     date: date
     quantity: Optional[float] = None
     unit_price: Optional[float] = None
     currency_code: str
     fee: Optional[float] = 0.0
+    withholding_tax: Optional[float] = 0.0
+    capital_gains_tax: Optional[float] = 0.0
+    securities_transaction_tax: Optional[float] = 0.0
+    stamp_duty: Optional[float] = 0.0
     note: Optional[str] = None
 
 class ActivityRead(ActivityCreate):
@@ -55,4 +59,8 @@ class ActivityUpdate(SQLModel):
     unit_price: Optional[float] = None   # used as amount for Dividend/Interest/Fee
     currency_code: Optional[str] = None
     fee: Optional[float] = None
+    withholding_tax: Optional[float] = None
+    capital_gains_tax: Optional[float] = None
+    securities_transaction_tax: Optional[float] = None
+    stamp_duty: Optional[float] = None
     note: Optional[str] = None

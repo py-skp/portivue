@@ -9,7 +9,9 @@ from sqlmodel import Session, select
 from app.models.activities import Activity
 from app.models.instrument import Instrument
 from app.models.account import Account
+from app.models.broker import Broker
 from app.models.user import User
+
 from app.core.settings_svc import get_or_create_settings
 from app.services.fx_resolver import fx_rate_on
 
@@ -77,15 +79,23 @@ def compute_positions(
     if not acts:
         return []
 
-    # 3) cache instruments
+    # 3) cache instruments & brokers
     inst_ids = {a.instrument_id for a in acts if a.instrument_id}
     inst_map: Dict[int, Instrument] = {}
     if inst_ids:
         rows = session.exec(select(Instrument).where(Instrument.id.in_(inst_ids))).all()
         inst_map = {r.id: r for r in rows}
 
+    broker_ids = {a.broker_id for a in acts if a.broker_id}
+    broker_map: Dict[int, Broker] = {}
+    if broker_ids:
+        brows = session.exec(select(Broker).where(Broker.id.in_(broker_ids))).all()
+        broker_map = {b.id: b for b in brows}
+
+
     # 4) rolling lots
-    Key = Tuple[int, int]
+    # Key: (account_id, instrument_id, broker_id)
+    Key = Tuple[int, int, Optional[int]]
     lots: Dict[Key, Lot] = defaultdict(Lot)
     fx_cache: Dict[Tuple[str, str, date], Optional[float]] = {}
 
@@ -93,8 +103,10 @@ def compute_positions(
         if not a.instrument_id or a.type not in ("Buy", "Sell"):
             continue
 
-        key: Key = (a.account_id, a.instrument_id)
+        # broker_id can be None
+        key: Key = (a.account_id, a.instrument_id, a.broker_id)
         lot = lots[key]
+
 
         q = float(a.quantity or 0.0)
         p = float(a.unit_price or 0.0)
@@ -130,18 +142,22 @@ def compute_positions(
     # 5) build rows
     today = date.today()
     rows: List[Dict] = []
-    for (account_id, instrument_id), lot in lots.items():
+    for (account_id, instrument_id, broker_id), lot in lots.items():
         if lot.qty <= 0:
             continue
 
         inst = inst_map.get(instrument_id)
         acc = acc_map.get(account_id)
+        brk = broker_map.get(broker_id) if broker_id else None
 
         if not inst:
             rows.append({
                 "account_id": account_id,
                 "account_name": acc.name if acc else account_id,
+                "broker_id": broker_id,
+                "broker_name": brk.name if brk else None,
                 "instrument_id": instrument_id,
+
                 "symbol": None,
                 "name": None,
                 "asset_class": None,
@@ -175,7 +191,10 @@ def compute_positions(
         rows.append({
             "account_id": account_id,
             "account_name": acc.name if acc else account_id,
+            "broker_id": broker_id,
+            "broker_name": brk.name if brk else None,
             "instrument_id": instrument_id,
+
             "symbol": inst.symbol or None,
             "name": inst.name,
             "asset_class": inst.asset_class,

@@ -26,12 +26,10 @@ def compute_account_balances(
     if base_ccy_override:
         base_ccy = base_ccy_override.upper()
     else:
-        try:
-            # Newer helper that accepts user_id
-            base_ccy = get_base_currency_code(session, user_id=user_id)  # type: ignore[arg-type]
-        except TypeError:
-            # Back-compat with older signature get_base_currency_code(session)
-            base_ccy = get_base_currency_code(session) or "USD"
+        # Fetch the user object to pass to get_base_currency_code
+        from app.models.user import User
+        user_obj = session.get(User, user_id)
+        base_ccy = get_base_currency_code(session, user=user_obj)
         base_ccy = base_ccy or "USD"
 
     # 🔒 only this user's accounts

@@ -25,17 +25,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
-    try { setMe(await api<Me>("/auth/me")); }
+    try { setMe(await api<Me>("/auth/me", { cache: "no-store" })); }
     catch { setMe({ authenticated: false }); }
     finally { setLoading(false); }
   }
 
   useEffect(() => { refresh(); }, []);
 
-function loginWithGoogle() {
-  // Full page redirect to backend login **via the proxy base**
-  window.location.href = `${API_BASE}/auth/google/login`;
-}
+  function loginWithGoogle() {
+    // Full page redirect to backend login **via the proxy base**
+    window.location.href = `${API_BASE}/auth/google/login`;
+  }
 
   async function logout() {
     try { await api("/auth/logout", { method: "POST" }); }

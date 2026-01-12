@@ -174,6 +174,9 @@ def fx_refresh(
                 ))
             inserted += 1
 
+    settings_row = get_or_create_settings(session)
+    settings_row.last_fx_refresh = datetime.now(timezone.utc)
+    session.add(settings_row)
     session.commit()
     return {"base": _pick_base_currency(session, base), "count": inserted, "date": str(as_of)}
 

@@ -2,6 +2,7 @@
 
 import type { Metadata } from "next";
 import Providers from "@/components/Providers"; // central provider wrapper
+import "@/styles/globals.css";
 import TopBar from "@/components/TopBar";
 
 export const metadata: Metadata = {

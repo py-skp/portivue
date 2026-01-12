@@ -1,15 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Paper, Stack, Typography, Box, FormControl, InputLabel, Select, MenuItem,
-  Button, Alert, CircularProgress
-} from "@mui/material";
-
+import { Coins, Save, RefreshCw, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { API_BASE } from "@/lib/api";
-const API = API_BASE; // resolves to "/api" if unset, no trailing slash
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
 
-// const API = process.env.NEXT_PUBLIC_API!; // "/api" via Next rewrites
+const API = API_BASE;
 
 type Currency = { code: string; name?: string | null };
 
@@ -37,7 +35,6 @@ export default function BaseCurrencyCard() {
       const s = await rs.json();
       const saved = s.base_currency_code?.trim();
 
-      // Force default = USD if nothing saved
       setBase(saved || "USD");
     } catch (e: any) {
       setErr(e.message || String(e));
@@ -59,7 +56,7 @@ export default function BaseCurrencyCard() {
       });
       const body = await r.text();
       if (!r.ok) throw new Error(`Save ${r.status}: ${body.slice(0, 200)}`);
-      setMsg("Saved base currency.");
+      setMsg("Base currency updated successfully.");
     } catch (e: any) {
       setErr(e.message || String(e));
     } finally {
@@ -70,45 +67,79 @@ export default function BaseCurrencyCard() {
   useEffect(() => { load(); }, []);
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack spacing={2}>
-        <Typography variant="h6">Base Currency</Typography>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+          <Coins size={24} className="text-emerald-500" />
+          Base Currency
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Set the default currency for your portfolio reporting.</p>
+      </div>
 
+      <Card className="p-6 bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 shadow-xl overflow-visible">
         {loading ? (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <CircularProgress size={18} /> Loading…
-          </Box>
+          <div className="flex items-center justify-center p-12">
+            <Loader2 className="animate-spin text-emerald-500" size={32} />
+          </div>
         ) : (
-          <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-            <FormControl size="small" sx={{ minWidth: 220 }}>
-              <InputLabel id="base-currency-label">Base Currency</InputLabel>
-                <Select
-                  labelId="base-currency-label"
-                  label="Base Currency"
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row gap-6 items-end">
+              <div className="flex-1 w-full">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1 mb-1.5 block">Portfolio Currency</label>
+                <select
                   value={base}
                   onChange={(e) => setBase(e.target.value)}
-                  required
+                  className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all appearance-none text-slate-900 dark:text-slate-200"
                 >
                   {currencies.map((c) => (
-                    <MenuItem key={c.code} value={c.code}>
+                    <option key={c.code} value={c.code}>
                       {c.code}{c.name ? ` — ${c.name}` : ""}
-                    </MenuItem>
+                    </option>
                   ))}
-                </Select>
-            </FormControl>
+                </select>
+              </div>
 
-            <Button variant="contained" onClick={save} disabled={saving || !base}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-            <Button variant="text" onClick={load} disabled={saving}>
-              Refresh
-            </Button>
-          </Box>
+              <div className="flex gap-2 w-full md:w-auto">
+                <Button
+                  onClick={save}
+                  disabled={saving || !base}
+                  isLoading={saving}
+                  className="flex-1 md:flex-none bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20 px-8"
+                >
+                  <Save size={18} className="mr-2" />
+                  Save Preference
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  onClick={load}
+                  disabled={saving}
+                  className="text-slate-400"
+                >
+                  <RefreshCw size={18} />
+                </Button>
+              </div>
+            </div>
+
+            {(err || msg) && (
+              <div className="flex items-center gap-3">
+                {err && (
+                  <div className="flex items-center gap-2 text-red-500 text-sm font-medium animate-in fade-in slide-in-from-left-2 transition-all">
+                    <AlertCircle size={16} />
+                    {err}
+                  </div>
+                )}
+                {msg && (
+                  <div className="flex items-center gap-2 text-emerald-500 text-sm font-medium animate-in fade-in slide-in-from-left-2 transition-all">
+                    <CheckCircle size={16} />
+                    {msg}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
-
-        {err && <Alert severity="error">{err}</Alert>}
-        {msg && <Alert severity="success">{msg}</Alert>}
-      </Stack>
-    </Paper>
+      </Card>
+    </div>
   );
 }

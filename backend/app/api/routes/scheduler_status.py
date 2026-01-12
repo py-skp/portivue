@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import os
-from datetime import timezone
+from datetime import timezone, datetime
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from apscheduler.job import Job
+from sqlmodel import Session
+
+from app.core.db import get_session
+from app.core.settings_svc import get_or_create_settings
+from app.models.settings import AppSetting
 
 router = APIRouter()
 
@@ -25,7 +30,7 @@ def _job_to_dict(job: Job) -> Dict[str, Any]:
 
 
 @router.get("/_scheduler_status")
-def scheduler_status(request: Request):
+def scheduler_status(request: Request, session: Session = Depends(get_session)):
     """
     Report scheduler status (enabled flag), configured provider, last-run timestamps,
     and upcoming jobs (with UTC next_run_time).
@@ -37,14 +42,28 @@ def scheduler_status(request: Request):
         for j in sched.get_jobs():
             jobs.append(_job_to_dict(j))
 
-    # Read last-run timestamps from scheduler module if available.
-    try:
-        from app.tasks.scheduler import LAST_RUN  # updated by jobs at runtime
+            jobs.append(_job_to_dict(j))
 
+    # Read last-run timestamps from DB (preferred) or scheduler module
+    try:
+        from app.tasks.scheduler import LAST_RUN  # fallback
+        
+        # Default to in-memory fallback
         last_runs = {
             "prices": LAST_RUN.get("prices"),
             "fx": LAST_RUN.get("fx"),
         }
+        
+        # Override with DB persistence if available
+        try:
+            settings_row = get_or_create_settings(session)
+            if settings_row.last_prices_refresh:
+                last_runs["prices"] = settings_row.last_prices_refresh.replace(tzinfo=timezone.utc).isoformat()
+            if settings_row.last_fx_refresh:
+                last_runs["fx"] = settings_row.last_fx_refresh.replace(tzinfo=timezone.utc).isoformat()
+        except Exception:
+            pass # DB read failed, stick to memory
+
     except Exception:
         last_runs = {"prices": None, "fx": None}
 
@@ -79,6 +98,7 @@ def refresh_prices_now(
         from sqlmodel import Session
         from app.core.db import engine
         from app.services.price_refresher import refresh_all_prices
+        from app.tasks.scheduler import LAST_RUN
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Import error: {e}")
 
@@ -101,6 +121,14 @@ def refresh_prices_now(
                 provider=provider,
                 logger=None,
             )
+            
+            # Persist last run time
+            settings_row = get_or_create_settings(s)
+            settings_row.last_prices_refresh = datetime.now(timezone.utc)
+            s.add(settings_row)
+            s.commit()
+            
+        LAST_RUN["prices"] = datetime.now(timezone.utc).isoformat()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"refresh failed: {e}")
 

@@ -1,5 +1,5 @@
 // app/login/layout.tsx
-import TopBar from "@/components/TopBar";
+import React from 'react';
 
 export const metadata = {
   title: "Login — Portivue",
@@ -8,7 +8,6 @@ export const metadata = {
 export default function LoginLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <TopBar />
       {children}
     </>
   );

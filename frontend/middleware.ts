@@ -10,10 +10,12 @@ const PUBLIC_PREFIXES = [
   "/terms",
   "/privacy",
   "/cookies",
+  "/features",
+  "/security",
 ];
 
 const SESSION_COOKIE_NAME =
-  process.env.NEXT_PUBLIC_SESSION_COOKIE_NAME || "finlytics_session";
+  process.env.NEXT_PUBLIC_SESSION_COOKIE_NAME || "portivue_session";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

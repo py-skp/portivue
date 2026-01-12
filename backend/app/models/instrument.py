@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, date as dt_date
 from typing import Optional
 
-from sqlmodel import SQLModel, Field, UniqueConstraint
+from sqlmodel import SQLModel, Field, UniqueConstraint, Index
 from app.models.tenant_mixin import TenantFields
 
 class Instrument(TenantFields, SQLModel, table=True):
@@ -12,6 +12,9 @@ class Instrument(TenantFields, SQLModel, table=True):
         # Make symbol unique per-tenant (org_id + symbol).
         # Allows NULL symbols (manual instruments) and avoids global unique collisions.
         UniqueConstraint("org_id", "symbol", name="uq_instrument_org_symbol"),
+        # Performance indexes for common queries
+        Index('ix_instrument_owner_source', 'owner_user_id', 'data_source'),
+        Index('ix_instrument_symbol_source', 'symbol', 'data_source'),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)

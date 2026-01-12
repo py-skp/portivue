@@ -1,7 +1,8 @@
 // app/theme-context.tsx
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import * as React from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import { buildTheme } from "./theme";
 import type { Mode } from "./theme";
@@ -11,14 +12,20 @@ const ThemeCtx = createContext<Ctx | null>(null);
 
 export function useThemeMode() {
   const ctx = useContext(ThemeCtx);
-  if (!ctx) throw new Error("useThemeMode must be used within ThemeModeProvider");
+  if (!ctx) {
+    // Return a default value instead of throwing during SSR
+    if (typeof window === "undefined") {
+      return { mode: "dark" as Mode, setMode: () => { }, toggle: () => { } };
+    }
+    throw new Error("useThemeMode must be used within ThemeModeProvider");
+  }
   return ctx;
 }
 
-const STORAGE_KEY = "finlytics_theme_mode";
+const STORAGE_KEY = "portivue_theme_mode";
 
 export default function ThemeModeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<Mode>("light");
+  const [mode, setMode] = useState<Mode>("dark");
 
   // read persisted pref (or system)
   useEffect(() => {
@@ -26,13 +33,20 @@ export default function ThemeModeProvider({ children }: { children: React.ReactN
     if (saved === "light" || saved === "dark") {
       setMode(saved);
     } else {
-      setMode("light"); // force light on first visit
+      setMode("dark"); // Default to dark for Portivue premium look
     }
   }, []);
 
-  // persist on change
+  // persist on change AND sync with tailwind
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, mode);
+
+    // Sync Tailwind's dark class
+    if (mode === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   }, [mode]);
 
   const value = useMemo(

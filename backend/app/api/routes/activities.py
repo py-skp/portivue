@@ -15,6 +15,7 @@ from app.schemas.activities import ActivityCreate, ActivityReadWithCalc, Activit
 from app.core.base_currency import get_base_currency_code
 from app.services.fx_resolver import fx_rate_on
 from app.api.deps import get_current_user
+from app.core.audit_logger import log_activity_created, log_activity_updated, log_activity_deleted
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -139,8 +140,18 @@ def create_activity(
     if not acc or acc.owner_user_id != user.id:
         raise HTTPException(status_code=403, detail="Invalid account for this user")
 
+    # Validate instrument requirement based on activity type
+    if payload.type in ("Buy", "Sell", "Dividend"):
+        if not payload.instrument_id:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{payload.type} activities require an instrument"
+            )
+
     # 🔒 server-side guard: block oversell
     if payload.type == "Sell":
+        if not payload.instrument_id:
+            raise HTTPException(status_code=422, detail="Sell requires an instrument")
         available = _available_qty(
             session,
             user_id=user.id,
@@ -159,6 +170,11 @@ def create_activity(
     session.add(act)
     session.commit()
     session.refresh(act)
+    
+    # Audit log
+    amount = (payload.quantity or 0) * (payload.unit_price or 0) if payload.quantity and payload.unit_price else None
+    log_activity_created(user.id, act.id, act.type, amount)
+    
     return _as_read_with_calc(act, session, user)
 
 
@@ -205,6 +221,10 @@ def update_activity(
     session.add(act)
     session.commit()
     session.refresh(act)
+    
+    # Audit log
+    log_activity_updated(user.id, activity_id, updates)
+    
     return _as_read_with_calc(act, session, user)
 
 

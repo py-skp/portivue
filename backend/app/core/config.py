@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 from typing import List, Optional, Literal
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
 
 
 class Settings(BaseSettings):
     # --- App basics ---
-    APP_NAME: str = "Finlytics"
+    APP_NAME: str = "Portivue"
 
     TENANCY_MODE: Literal["per_user", "per_org"] = "per_user"
 
@@ -21,7 +20,7 @@ class Settings(BaseSettings):
 
     # --- Sessions / Cookies ---
     SESSION_SECRET: str = Field(..., alias="SESSION_SECRET")
-    SESSION_COOKIE_NAME: str = Field("finlytics_session", alias="SESSION_COOKIE_NAME")
+    SESSION_COOKIE_NAME: str = Field("portivue_session", alias="SESSION_COOKIE_NAME")
     SESSION_COOKIE_SECURE: bool = Field(False, alias="SESSION_COOKIE_SECURE")
     SESSION_COOKIE_DOMAIN: Optional[str] = Field(None, alias="SESSION_COOKIE_DOMAIN")
     SESSION_COOKIE_SAMESITE: str = Field("lax", alias="SESSION_COOKIE_SAMESITE")
@@ -48,6 +47,9 @@ class Settings(BaseSettings):
     # --- FX API ---
     oxr_app_id: Optional[str] = Field(default=None, alias="OXR_APP_ID")
 
+    # --- Redis (for rate limiting and caching) ---
+    REDIS_URL: Optional[str] = Field(default=None, alias="REDIS_URL")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -56,20 +58,15 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    # Normalize CORS from CSV if provided
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def _normalize_cors(cls, v, info):
-        csv = None
-        if hasattr(info, "data") and isinstance(info.data, dict):
-            csv = info.data.get("CORS_ORIGINS_CSV")
-
-        if csv:
-            return [p.strip() for p in str(csv).split(",") if p.strip()]
-
-        if isinstance(v, str):
-            return [v]
-        return v
+    # Use model_validator to process CORS_ORIGINS_CSV after all fields are loaded
+    @model_validator(mode="after")
+    def _process_cors_csv(self):
+        """Parse CORS_ORIGINS_CSV if provided and override CORS_ORIGINS."""
+        if self.CORS_ORIGINS_CSV:
+            origins = [p.strip() for p in self.CORS_ORIGINS_CSV.split(",") if p.strip()]
+            print(f"DEBUG: Parsed CORS_ORIGINS_CSV '{self.CORS_ORIGINS_CSV}' into: {origins}")
+            self.CORS_ORIGINS = origins
+        return self
 
     # Normalize postgres scheme
     @field_validator("database_url", mode="before")
@@ -77,6 +74,26 @@ class Settings(BaseSettings):
     def _normalize_db_url(cls, v: str):
         if isinstance(v, str) and v.startswith("postgres://"):
             return v.replace("postgres://", "postgresql://", 1)
+        return v
+
+    # Validate session secret strength
+    @field_validator("SESSION_SECRET", mode="after")
+    @classmethod
+    def _validate_session_secret(cls, v: str):
+        if len(v) < 32:
+            raise ValueError("SESSION_SECRET must be at least 32 characters for security")
+        
+        # Check for common weak secrets
+        weak_secrets = {
+            "dev-secret", "admin123", "changeme", "secret", "password",
+            "12345678901234567890123456789012",  # 32 chars of sequential numbers
+        }
+        if v.lower() in weak_secrets or v in weak_secrets:
+            raise ValueError(
+                "SESSION_SECRET cannot be a default or weak value. "
+                "Generate a strong secret with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+            )
+        
         return v
 
 

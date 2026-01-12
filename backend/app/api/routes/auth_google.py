@@ -17,6 +17,7 @@ from ...core.session import (
 from ...core.config import settings
 from ...models.user import User
 from ...models.oauth_account import OAuthAccount
+from ...core.slowapi_config import limiter
 
 REMEMBER_TMP_COOKIE = "portivue_remember"
 NEXT_TMP_COOKIE = "portivue_next"
@@ -63,6 +64,7 @@ async def google_go(request: Request):
     redirect_uri = settings.GOOGLE_REDIRECT_URI
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
+@limiter.limit("10/minute")
 @router.get("/google/callback")
 async def google_callback(request: Request, session: Session = Depends(get_session)):
     try:
@@ -127,20 +129,22 @@ def logout():
 
 @router.get("/me")
 def me(request: Request, session_db: Session = Depends(get_session)):
+    headers = {"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+
     token = request.cookies.get(settings.SESSION_COOKIE_NAME)
     if not token:
-        return JSONResponse({"authenticated": False})
+        return JSONResponse({"authenticated": False}, headers=headers)
 
     try:
         payload = load_session_cookie(token)
     except Exception:
-        return JSONResponse({"authenticated": False})
+        return JSONResponse({"authenticated": False}, headers=headers)
 
     user = session_db.get(User, payload["uid"])
     if not user or not user.is_active:
-        return JSONResponse({"authenticated": False})
+        return JSONResponse({"authenticated": False}, headers=headers)
 
-    return {
+    return JSONResponse({
         "authenticated": True,
         "twofa_ok": bool(payload.get("2fa")),
         "user": {
@@ -150,4 +154,4 @@ def me(request: Request, session_db: Session = Depends(get_session)):
             "picture": user.picture_url,
             "totp_enabled": user.totp_enabled,
         },
-    }
+    }, headers=headers)

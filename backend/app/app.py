@@ -13,6 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.db import init_db
 from app.tasks.scheduler import build_scheduler  # returns an APScheduler instance
+from app.core.slowapi_config import limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+logger = logging.getLogger(__name__)
 
 # Routers
 from app.api.routes.health import router as health_router
@@ -35,6 +39,8 @@ from app.api.routes.currencies import router as currencies_router
 from app.api.routes.scheduler_status import router as scheduler_status_router
 from app.api.routes.refresh_status import router as refresh_status_router
 from app.api.routes.auth_email import router as auth_email_router
+from app.api.routes.charts import router as charts_router
+
 
 from app.admin.admin import mount_admin
 
@@ -88,8 +94,13 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
     app.router.redirect_slashes = False
 
+    # Rate limiting
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
     # CORS
     allow_origins = getattr(settings, "CORS_ORIGINS", ["*"])
+    logger.info(f"Configuring CORS with origins: {allow_origins}")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allow_origins,
@@ -118,10 +129,16 @@ def create_app() -> FastAPI:
     app.include_router(scheduler_status_router)
     app.include_router(refresh_status_router)
     app.include_router(auth_email_router)
+    app.include_router(charts_router)
+
 
     # Auth
     app.include_router(auth_google_router)
     app.include_router(totp_router)
+    
+    # Password management
+    from app.api.routes.change_password import router as change_password_router
+    app.include_router(change_password_router)
 
     # Admin UI (don’t crash if misconfigured)
     try:

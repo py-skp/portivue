@@ -16,7 +16,7 @@
 # # Create tables if they don't exist
 # SQLModel.metadata.create_all(engine)
 
-# app = FastAPI(title="Finlytics Admin")
+# app = FastAPI(title="Portivue Admin")
 
 # # --- simple auth for admin ---
 # ADMIN_USER = os.getenv("ADMIN_USER", "admin")

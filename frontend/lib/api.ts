@@ -5,6 +5,14 @@ const raw = process.env.NEXT_PUBLIC_API;
 // Treat "", "undefined", and "null" as unset
 const sanitized = !raw || raw === "undefined" || raw === "null" ? "/api" : raw;
 
+// Fail fast in production if API base is not configured
+if ((!raw || raw === "undefined" || raw === "null") && process.env.NODE_ENV === 'production') {
+  throw new Error(
+    'NEXT_PUBLIC_API must be explicitly set in production environment. ' +
+    'Defaulting to "/api" is only allowed in development.'
+  );
+}
+
 // trim any trailing slash(es)
 export const API_BASE = sanitized.replace(/\/+$/, "");
 

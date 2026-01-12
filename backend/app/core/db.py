@@ -10,6 +10,9 @@ from app.core.config import settings
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
+    pool_size=10,          # Connection pool size
+    max_overflow=20,       # Allow burst connections
+    pool_recycle=3600,     # Recycle connections after 1 hour
     future=True,
 )
 

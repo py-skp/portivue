@@ -28,6 +28,7 @@
 
 from __future__ import annotations
 from typing import Optional
+from datetime import datetime
 from sqlmodel import SQLModel, Field
 from sqlalchemy import UniqueConstraint
 from app.models.tenant_mixin import TenantFields
@@ -43,3 +44,5 @@ class AppSetting(TenantFields, SQLModel, table=True):
     base_currency_code: Optional[str] = Field(
         default=None, foreign_key="currency.code", nullable=True
     )
+    last_prices_refresh: Optional[datetime] = None
+    last_fx_refresh: Optional[datetime] = None

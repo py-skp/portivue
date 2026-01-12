@@ -1,18 +1,39 @@
-// app/(app)/activities/page.tsx
 "use client";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 
-import { useEffect, useMemo, useState } from "react";
+
 import {
-  Box, Paper, Typography, Table, TableBody, TableCell, TableHead, TableRow,
-  Chip, CircularProgress, Alert, Button, TableContainer, Stack, TextField,
-  MenuItem, IconButton, Tooltip, Menu, FormGroup, FormControlLabel, Checkbox,
-  Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete
-} from "@mui/material";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import ViewColumnIcon from "@mui/icons-material/ViewColumn";
-import EditIcon from "@mui/icons-material/Edit";
-import SearchIcon from "@mui/icons-material/Search";
-import { api } from "@/lib/api";
+  RefreshCw,
+  Columns,
+  Edit,
+  Search,
+  Filter,
+  Info,
+  Loader2,
+  AlertCircle,
+  Plus,
+  ChevronDown,
+  Check,
+  Calendar,
+  DollarSign,
+  Tag,
+  Briefcase,
+  User,
+  X,
+  CheckCircle2,
+  Hash
+} from "lucide-react";
+
+import { apiClient, ApiError } from "@/lib/apiClient";
+import { ErrorState } from "@/components/feedback/ErrorState";
+import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/forms/Select";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+
+
 
 // ---------- Types ----------
 type ActivityCore = {
@@ -41,7 +62,7 @@ type ActivityCalc = ActivityCore & {
 type Activity = ActivityCore | ActivityCalc;
 
 type Account = { id: number; name: string; currency_code?: string };
-type Broker  = { id: number; name: string };
+type Broker = { id: number; name: string };
 type Instrument = {
   id: number;
   symbol: string | null;
@@ -79,12 +100,14 @@ function isCalc(x: Activity): x is ActivityCalc {
 // ---------- Component ----------
 export default function ActivitiesPage() {
   // data
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
+
   const [err, setErr] = useState<string | null>(null);
   const [rows, setRows] = useState<Activity[]>([]);
   const [accounts, setAccounts] = useState<Record<number, Account>>({});
-  const [brokers,  setBrokers]  = useState<Record<number, Broker>>({});
-  const [instMap,  setInstMap]  = useState<Record<number, Instrument>>({});
+  const [brokers, setBrokers] = useState<Record<number, Broker>>({});
+  const [instMap, setInstMap] = useState<Record<number, Instrument>>({});
 
   // filters
   const [fltType, setFltType] = useState<"" | ActivityCore["type"]>("");
@@ -94,24 +117,25 @@ export default function ActivitiesPage() {
   const [fltTo, setFltTo] = useState<string>("");
   const [fltText, setFltText] = useState<string>("");
 
-  // columns menu
-  const [colMenuAnchor, setColMenuAnchor] = useState<null | HTMLElement>(null);
   const [cols, setCols] = useState({
     date: true,
     type: true,
     account: true,
     broker: true,
     instrument: true,
-    assetClass: true,
-    subClass: true,
+    assetClass: false,
+    subClass: false,
     qty: true,
     unitPrice: true,
     totalLocal: true,
     ccy: true,
-    fx: true,         // base columns shown only if available
+    fx: false,
     totalBase: true,
-    note: true,
+    note: false,
   });
+
+
+  const [colMenuOpen, setColMenuOpen] = useState(false);
 
   // edit dialog state
   const [editOpen, setEditOpen] = useState(false);
@@ -135,6 +159,8 @@ export default function ActivitiesPage() {
   const [instOptions, setInstOptions] = useState<InstOption[]>([]);
   const [lockCcy, setLockCcy] = useState(false);
 
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
   // base columns visibility & base currency
   const showBaseCols = useMemo(() => {
     const first = rows[0];
@@ -142,34 +168,51 @@ export default function ActivitiesPage() {
   }, [rows]);
 
   const baseCurrency = useMemo(() => {
-    if (!showBaseCols) return undefined;
+    if (!showBaseCols) return "BASE";
     return (rows[0] as ActivityCalc).base_currency;
   }, [rows, showBaseCols]);
+
+
+  const colMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const clickOut = (e: MouseEvent) => colMenuRef.current && !colMenuRef.current.contains(e.target as Node) && setColMenuOpen(false);
+    document.addEventListener("mousedown", clickOut);
+    return () => document.removeEventListener("mousedown", clickOut);
+  }, []);
+
+  useEffect(() => {
+    if (successMsg) {
+      const t = setTimeout(() => setSuccessMsg(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [successMsg]);
+
 
   // ---------- Load ----------
   async function load() {
     setLoading(true);
     setErr(null);
     try {
-      const acts = await api<Activity[]>("/activities");
+      const acts = await apiClient.get<Activity[]>("/activities");
 
       const [accs, brks] = await Promise.all([
-        api<Account[]>("/lookups/accounts"),
-        api<Broker[]>("/lookups/brokers").catch(() => []),
+        apiClient.get<Account[]>("/lookups/accounts"),
+        apiClient.get<Broker[]>("/lookups/brokers").catch(() => []),
       ]);
 
       const brkMap: Record<number, Broker> = {};
-      brks.forEach((b) => (brkMap[b.id] = b));
+      brks.forEach((b: any) => (brkMap[b.id] = b));
 
       const accMap: Record<number, Account> = {};
-      accs.forEach(a => accMap[a.id] = a);
+      accs.forEach((a: any) => accMap[a.id] = a);
 
       // instruments for visible rows (unique ids)
       const ids = Array.from(new Set(acts.map(a => a.instrument_id).filter(Boolean))) as number[];
       const fetched: Record<number, Instrument> = {};
       await Promise.all(
         ids.map(async (id) => {
-          try { fetched[id] = await api<Instrument>(`/instruments/${id}`); } catch {}
+          try { fetched[id] = await apiClient.get<Instrument>(`/instruments/${id}`); } catch { }
         })
       );
 
@@ -210,8 +253,9 @@ export default function ActivitiesPage() {
   }, [rows, fltType, fltAccount, fltBroker, fltFrom, fltTo, fltText, accounts, brokers, instMap]);
 
   // ---------- Columns menu ----------
-  const openCols = (e: React.MouseEvent<HTMLElement>) => setColMenuAnchor(e.currentTarget);
-  const closeCols = () => setColMenuAnchor(null);
+  const toggleCols = () => setColMenuOpen(!colMenuOpen);
+  const closeCols = () => setColMenuOpen(false);
+
 
   // ---------- Edit ----------
   function openEdit(a: Activity) {
@@ -243,9 +287,10 @@ export default function ActivitiesPage() {
     const t = setTimeout(async () => {
       if (!q.trim()) { setInstOptions([]); return; }
       const [localRes, yahooRes] = await Promise.allSettled([
-        api<Instrument[]>(`/instruments?q=${encodeURIComponent(q)}&limit=10`),
-        api<{ items?: any[] }>(`/instruments/suggest?q=${encodeURIComponent(q)}&limit=10`),
+        apiClient.get<Instrument[]>(`/instruments?q=${encodeURIComponent(q)}&limit=10`),
+        apiClient.get<{ items?: any[] }>(`/instruments/suggest?q=${encodeURIComponent(q)}&limit=10`),
       ]);
+
 
       const opts: InstOption[] = [];
       if (localRes.status === "fulfilled") {
@@ -272,11 +317,13 @@ export default function ActivitiesPage() {
 
   async function upsertYahoo(sym: string, quoteType?: string) {
     const subclass = quoteType === "ETF" ? "ETF" : quoteType === "MUTUALFUND" ? "Mutual Fund" : "Stock";
-    return await api<Instrument>(
+    return await apiClient.post<Instrument>(
       `/instruments/upsert_from_yahoo?symbol=${encodeURIComponent(sym)}&asset_subclass=${encodeURIComponent(subclass)}`,
-      { method: "POST" }
+      {}
     );
+
   }
+
 
   async function saveEdit() {
     if (!editRow) return;
@@ -300,27 +347,25 @@ export default function ActivitiesPage() {
 
       let updated: Activity;
       try {
-        updated = await api<Activity>(`/activities/${editRow.id}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
+        updated = await apiClient.patch<Activity>(`/activities/${editRow.id}`, payload);
       } catch {
-        updated = await api<Activity>(`/activities/${editRow.id}`, {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
+        updated = await apiClient.put<Activity>(`/activities/${editRow.id}`, payload);
       }
+
 
       setRows(prev => prev.map(x => (x.id === updated.id ? updated : x)));
 
       // fetch instrument if it wasn't in cache
       if (updated.instrument_id && !instMap[updated.instrument_id]) {
         try {
-          const inst = await api<Instrument>(`/instruments/${updated.instrument_id}`);
+          const inst = await apiClient.get<Instrument>(`/instruments/${updated.instrument_id}`);
           setInstMap(prev => ({ ...prev, [inst.id]: inst }));
-        } catch {}
+        } catch { }
       }
+
+      setSuccessMsg("Activity updated successfully");
       closeEdit();
+
     } catch (e: any) {
       setEditErr(e.message || "Update failed");
     } finally {
@@ -329,392 +374,421 @@ export default function ActivitiesPage() {
   }
 
   // ---------- Render ----------
+  if (loading && rows.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="w-10 h-10 text-brand-500 animate-spin" />
+        <p className="text-slate-400 font-medium">Loading activities...</p>
+      </div>
+    );
+  }
+
+  if (err) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        <ErrorState error={err} onRetry={load} />
+      </div>
+    );
+  }
+
+
   return (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <div className="flex-1 w-full flex flex-col space-y-6">
+      {/* Floating Success Toast */}
+      {successMsg && (
+        <div className="fixed top-6 right-6 z-[9999] animate-in slide-in-from-right-10 fade-in duration-500">
+          <div className="bg-slate-900/95 backdrop-blur-xl border border-emerald-500/30 rounded-2xl p-4 shadow-2xl flex items-center gap-4 min-w-[320px]">
+            <div className="h-10 w-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500 shrink-0">
+              <CheckCircle2 size={24} />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-black text-emerald-500 uppercase tracking-widest mb-0.5">Success</p>
+              <p className="text-sm font-bold text-slate-100">{successMsg}</p>
+            </div>
+            <button onClick={() => setSuccessMsg(null)} className="p-1 hover:bg-white/10 rounded-lg transition-colors text-slate-400">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <Box sx={{ display:"flex", alignItems:"center", justifyContent:"space-between", mb: 2 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.3 }}>Activities</Typography>
-          <Typography variant="body2" color="text.secondary">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-black text-white tracking-tight flex items-center gap-3">
+            Activities
+          </h1>
+          <p className="text-slate-400 font-medium mt-1">
             Trades, dividends, interest, and fees. Filter, review, and edit.
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Show / hide columns">
-            <IconButton onClick={openCols}><ViewColumnIcon /></IconButton>
-          </Tooltip>
-          <Tooltip title="Reload">
-            <IconButton onClick={load} disabled={loading}><RefreshIcon /></IconButton>
-          </Tooltip>
-        </Stack>
-      </Box>
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="relative" ref={colMenuRef}>
+            <Button variant="outline" onClick={toggleCols} className="gap-2">
+              <Columns size={18} />
+              <span className="hidden sm:inline">Columns</span>
+              <ChevronDown size={14} className={`transition-transform duration-200 ${colMenuOpen ? "rotate-180" : ""}`} />
+            </Button>
+
+            {colMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-[100] p-4 animate-in fade-in zoom-in-95 duration-200">
+                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 px-1">Visible Columns</h4>
+                <div className="space-y-1">
+                  {Object.entries(cols).map(([k, v]) => (
+                    <button
+                      key={k}
+                      onClick={() => setCols(s => ({ ...s, [k]: !v }))}
+                      className="flex items-center justify-between w-full px-3 py-2 rounded-xl hover:bg-white/5 transition-colors group text-left"
+                    >
+                      <span className={`text-xs font-bold transition-colors ${v ? "text-slate-200" : "text-slate-500 group-hover:text-slate-300"}`}>
+                        {({
+                          date: "Date", type: "Type", account: "Account", broker: "Broker",
+                          instrument: "Instrument", assetClass: "Asset Class", subClass: "Sub-Class",
+                          qty: "Qty", unitPrice: "Unit Price / Amount", totalLocal: "Total",
+                          ccy: "CCY", fx: `FX → ${baseCurrency}`, totalBase: `Total (${baseCurrency})`, note: "Note",
+                        } as any)[k]}
+                      </span>
+                      {v && <Check size={14} className="text-brand-500" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <Button variant="secondary" onClick={load} disabled={loading} className="gap-2 aspect-square md:aspect-auto">
+            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+            <span className="hidden sm:inline">Reload</span>
+          </Button>
+
+
+          <Button onClick={() => router.push("/activities/new")} className="gap-2">
+            <Plus size={18} />
+            <span>Add Activity</span>
+          </Button>
+
+
+        </div>
+      </div>
 
       {/* Filters */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems="center" useFlexGap flexWrap="wrap">
-          <TextField
-            select size="small" label="Type" value={fltType}
-            onChange={(e) => setFltType(e.target.value as any)}
-            sx={{ minWidth: 160 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {["Buy","Sell","Dividend","Interest","Fee"].map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-          </TextField>
-
-          <TextField
-            select size="small" label="Account" value={fltAccount}
-            onChange={(e) => setFltAccount(e.target.value === "" ? "" : Number(e.target.value))}
-            sx={{ minWidth: 200 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {Object.values(accounts).map(a => <MenuItem key={a.id} value={a.id}>{a.name}</MenuItem>)}
-          </TextField>
-
-          <TextField
-            select size="small" label="Broker" value={fltBroker}
-            onChange={(e) => setFltBroker(e.target.value === "" ? "" : Number(e.target.value))}
-            sx={{ minWidth: 200 }}
-          >
-            <MenuItem value="">All</MenuItem>
-            {Object.values(brokers).map(b => <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>)}
-          </TextField>
-
-          <TextField
-            size="small" type="date" label="From" value={fltFrom}
-            onChange={(e) => setFltFrom(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-          />
-          <TextField
-            size="small" type="date" label="To" value={fltTo}
-            onChange={(e) => setFltTo(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-          />
-
-          <TextField
-            size="small"
-            label="Search (instrument / account / broker / note)"
-            value={fltText}
-            onChange={(e) => setFltText(e.target.value)}
-            InputProps={{ startAdornment: <SearchIcon sx={{ mr: 1 }} fontSize="small" /> }}
-            sx={{ minWidth: 340, flex: 1 }}
-          />
-        </Stack>
-      </Paper>
-
-      {/* Table */}
-      {loading && (
-        <Box sx={{ display:"flex", alignItems:"center", gap:2 }}>
-          <CircularProgress size={20}/> Loading…
-        </Box>
-      )}
-
-      {!!err && (
-        <Alert severity="error" sx={{ mb:2 }}>
-          {err} — check your backend and CORS.
-        </Alert>
-      )}
-
-      {!loading && !err && filtered.length === 0 && (
-        <Alert severity="info">No activities match your filters.</Alert>
-      )}
-
-      {!loading && !err && filtered.length > 0 && (
-        <Paper sx={{ flex: 1, display: "flex", minHeight: 0 }}>
-          <TableContainer sx={{ flex: 1 }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow>
-                  {cols.date && <TableCell>Date</TableCell>}
-                  {cols.type && <TableCell>Type</TableCell>}
-                  {cols.account && <TableCell>Account</TableCell>}
-                  {cols.broker && <TableCell>Broker</TableCell>}
-                  {cols.instrument && <TableCell>Instrument</TableCell>}
-                  {cols.assetClass && <TableCell>Asset Class</TableCell>}
-                  {cols.subClass && <TableCell>Sub-Class</TableCell>}
-                  {cols.qty && <TableCell align="right">Qty</TableCell>}
-                  {cols.unitPrice && <TableCell align="right">Unit Price / Amount</TableCell>}
-                  {cols.totalLocal && <TableCell align="right">Total</TableCell>}
-                  {cols.ccy && <TableCell>CCY</TableCell>}
-                  {showBaseCols && cols.fx && <TableCell align="right">FX → {baseCurrency}</TableCell>}
-                  {showBaseCols && cols.totalBase && <TableCell align="right">Total ({baseCurrency})</TableCell>}
-                  {cols.note && <TableCell>Note</TableCell>}
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filtered
-                  .slice()
-                  .sort((a,b)=> b.date.localeCompare(a.date))
-                  .map((a) => {
-                    const acc = accounts[a.account_id]?.name ?? a.account_id;
-                    const brokerName = a.broker_id ? (brokers[a.broker_id]?.name ?? a.broker_id) : "";
-                    const inst = a.instrument_id ? instMap[a.instrument_id] : undefined;
-                    const instLabel = inst ? (inst.symbol || inst.name) : (a.instrument_id ?? "");
-
-                    const trade = a.type === "Buy" || a.type === "Sell";
-                    const qty = trade ? (a.quantity ?? 0) : 0;
-                    const unit = a.unit_price ?? 0;
-                    const totalLocal = computeTotalLocal(a);
-
-                    const fx = isCalc(a) ? a.fx_rate : null;
-                    const totalBase = isCalc(a) ? a.net_amount_base : (fx != null ? totalLocal * fx : null);
-
-                    return (
-                      <TableRow key={a.id} hover>
-                        {cols.date && <TableCell>{a.date}</TableCell>}
-                        {cols.type && <TableCell><Chip size="small" label={a.type}/></TableCell>}
-                        {cols.account && <TableCell>{acc}</TableCell>}
-                        {cols.broker && <TableCell>{brokerName || "—"}</TableCell>}
-                        {cols.instrument && <TableCell>{instLabel}</TableCell>}
-                        {cols.assetClass && <TableCell>{inst?.asset_class ?? ""}</TableCell>}
-                        {cols.subClass && <TableCell>{inst?.asset_subclass ?? ""}</TableCell>}
-                        {cols.qty && <TableCell align="right">{trade ? nf4.format(qty) : ""}</TableCell>}
-                        {cols.unitPrice && (
-                          <TableCell align="right">
-                            {unit != null ? nf4.format(Number(unit)) : ""}
-                          </TableCell>
-                        )}
-                        {cols.totalLocal && <TableCell align="right">{nf2.format(totalLocal)}</TableCell>}
-                        {cols.ccy && <TableCell>{a.currency_code}</TableCell>}
-                        {showBaseCols && cols.fx && (
-                          <TableCell align="right">{fx != null ? nf4.format(fx) : "—"}</TableCell>
-                        )}
-                        {showBaseCols && cols.totalBase && (
-                          <TableCell align="right">{totalBase != null ? nf2.format(totalBase) : "—"}</TableCell>
-                        )}
-                        {cols.note && <TableCell>{a.note}</TableCell>}
-                        <TableCell align="right">
-                          <Tooltip title="Edit">
-                            <IconButton size="small" onClick={() => openEdit(a)}>
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
-
-      {/* Columns menu */}
-      <Menu anchorEl={colMenuAnchor} open={!!colMenuAnchor} onClose={closeCols}>
-        <Box sx={{ px: 1.5, py: 1 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Columns</Typography>
-          <FormGroup>
-            {Object.entries(cols).map(([k, v]) => (
-              <FormControlLabel
-                key={k}
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={v}
-                    onChange={() =>
-                      setCols(prev => ({ ...prev, [k]: !prev[k as keyof typeof prev] }))
-                    }
-                  />
-                }
-                label={k
-                  .replace(/([A-Z])/g, " $1")
-                  .replace(/^./, (c) => c.toUpperCase())
-                  .replace("Fx", "FX")}
-              />
-            ))}
-          </FormGroup>
-        </Box>
-      </Menu>
-
-      {/* Edit dialog */}
-      <Dialog open={editOpen} onClose={closeEdit} maxWidth="md" fullWidth>
-        <DialogTitle>Edit Activity</DialogTitle>
-        <DialogContent dividers>
-          {!!editErr && <Alert severity="error" sx={{ mb: 2 }}>{editErr}</Alert>}
-          <Stack spacing={2}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                select fullWidth label="Type"
-                value={editType}
-                onChange={(e) => setEditType(e.target.value as ActivityCore["type"])}
-              >
-                {["Buy","Sell","Dividend","Interest","Fee"].map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-              </TextField>
-
-              <TextField
-                select fullWidth label="Account"
-                value={editAccountId}
-                onChange={(e) => setEditAccountId(e.target.value === "" ? "" : Number(e.target.value))}
-              >
-                {Object.values(accounts).map(a => <MenuItem key={a.id} value={a.id}>{a.name}</MenuItem>)}
-              </TextField>
-
-              <TextField
-                select fullWidth label="Broker (optional)"
-                value={editBrokerId}
-                onChange={(e) => setEditBrokerId(e.target.value === "" ? "" : Number(e.target.value))}
-              >
-                <MenuItem value="">(None)</MenuItem>
-                {Object.values(brokers).map(b => <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>)}
-              </TextField>
-            </Stack>
-
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                type="date" fullWidth label="Date"
-                InputLabelProps={{ shrink: true }}
-                value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
-              />
-              <TextField
-                select fullWidth label="Currency"
-                value={editCcy}
-                onChange={(e) => setEditCcy(e.target.value)}
-                disabled={lockCcy}
-              >
-                {[...new Set(Object.values(accounts).map(a => a.currency_code).filter(Boolean))].map(ccy =>
-                  <MenuItem key={ccy} value={ccy!}>{ccy}</MenuItem>
-                )}
-              </TextField>
-            </Stack>
-
-            {/* Instrument search (local + yahoo) */}
-            <Autocomplete<InstOption, false, false, true>
-              freeSolo
-              options={instOptions}
-              value={
-                editInstrumentId
-                  ? ({ source: "local", id: editInstrumentId, name: instMap[editInstrumentId]?.name ?? "", symbol: instMap[editInstrumentId]?.symbol ?? null } as InstOption)
-                  : (editInstrumentSearch as unknown as InstOption | null)
-              }
-              onInputChange={(_, val) => {
-                if (typeof val === "string") {
-                  setEditInstrumentSearch(val);
-                } else {
-                  // when user picks option object, MUI also triggers input change; ignore here
-                  setEditInstrumentSearch(prev => prev);
-                }
-                setLockCcy(false);
-              }}
-              onChange={async (_, val) => {
-                if (val == null) {
-                  setEditInstrumentId(undefined);
-                  return;
-                }
-                if (typeof val === "string") {
-                  // user typed and pressed Enter without selecting a suggestion
-                  try {
-                    const inst = await upsertYahoo(val);
-                    setEditInstrumentId(inst.id);
-                    setEditInstrumentSearch(inst.symbol || inst.name);
-                    if (inst.currency_code) { setEditCcy(inst.currency_code); setLockCcy(true); }
-                  } catch (e: any) {
-                    setEditErr(e.message || "Failed to add instrument");
-                  }
-                  return;
-                }
-                // InstOption object
-                if (val.source === "local") {
-                  setEditInstrumentId(val.id);
-                  setEditInstrumentSearch(val.symbol || val.name);
-                  if (val.currency) { setEditCcy(val.currency); setLockCcy(true); }
-                } else {
-                  // yahoo — requires upsert
-                  try {
-                    const inst = await upsertYahoo(val.symbol, val.type);
-                    setEditInstrumentId(inst.id);
-                    setEditInstrumentSearch(inst.symbol || inst.name);
-                    if (inst.currency_code) { setEditCcy(inst.currency_code); setLockCcy(true); }
-                  } catch (e: any) {
-                    setEditErr(e.message || "Failed to add instrument");
-                  }
-                }
-              }}
-              isOptionEqualToValue={(o, v) => {
-                if (typeof v === "string") return false;
-                if (o.source === "local" && v.source === "local") return o.id === v.id;
-                return o.source === v.source && (o as any).symbol === (v as any).symbol;
-              }}
-              getOptionLabel={(o) =>
-                typeof o === "string"
-                  ? o
-                  : (o.name || o.symbol || "")
-              }
-              renderInput={(p) => <TextField {...p} label="Instrument" />}
-              renderOption={(props, option) => (
-                <li
-                  {...props}
-                  key={`${option.source}-${"id" in option ? option.id : option.symbol}`}
-                >
-                  <Box>
-                    <Typography variant="body2">
-                      {(option.name || option.symbol || "")}
-                      {("symbol" in option && option.symbol && option.name) ? ` (${option.symbol})` : ""}
-                    </Typography>
-                    <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                      {(option as any).currency ?? ""}
-                      {("type" in option && option.type) ? ` · ${option.type}` : ""}
-                      {("exchange" in option && option.exchange) ? ` · ${option.exchange}` : ""}
-                      {option.source === "local" ? " · local" : ""}
-                    </Typography>
-                  </Box>
-                </li>
-              )}
+      <Card className="p-4 md:p-6 bg-slate-900/40 border-slate-800/50 backdrop-blur-sm">
+        <div className="flex flex-col space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <Select
+              label="Type"
+              value={String(fltType)}
+              onChange={(e) => setFltType(e.target.value as any)}
+              options={[
+                { value: "", label: "All Types" },
+                { value: "Buy", label: "Buy" },
+                { value: "Sell", label: "Sell" },
+                { value: "Dividend", label: "Dividend" },
+                { value: "Interest", label: "Interest" },
+                { value: "Fee", label: "Fee" },
+              ]}
+              icon={<Filter className="w-4 h-4" />}
             />
 
-            {/* Trade vs non-trade inputs */}
-            {(editType === "Buy" || editType === "Sell") ? (
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField
-                  fullWidth type="number" label="Quantity"
-                  value={editQty} onChange={(e) => setEditQty(e.target.value)}
-                  inputProps={{ step: "any" }}
-                />
-                <TextField
-                  fullWidth type="number" label="Unit Price"
-                  value={editUnitPrice} onChange={(e) => setEditUnitPrice(e.target.value)}
-                  inputProps={{ step: "any" }}
-                />
-              </Stack>
-            ) : (
-              <TextField
-                fullWidth type="number" label="Amount"
-                value={editUnitPrice} onChange={(e) => setEditUnitPrice(e.target.value)}
-                inputProps={{ step: "any" }}
-                helperText={editType === "Dividend" ? "Dividend cash amount" : editType === "Interest" ? "Interest cash amount" : "Fee amount"}
-              />
-            )}
+            <Select
+              label="Account"
+              value={String(fltAccount)}
+              onChange={(e) => setFltAccount(e.target.value === "" ? "" : Number(e.target.value))}
+              options={[
+                { value: "", label: "All Accounts" },
+                ...Object.values(accounts).map(a => ({ value: String(a.id), label: a.name }))
+              ]}
+              icon={<Briefcase className="w-4 h-4" />}
+            />
 
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                fullWidth type="number" label="Fee"
-                value={editFee} onChange={(e) => setEditFee(e.target.value)}
-                inputProps={{ step: "any" }}
-              />
-              <TextField fullWidth label="Note" value={editNote} onChange={(e) => setEditNote(e.target.value)} />
-            </Stack>
+            <Select
+              label="Broker"
+              value={String(fltBroker)}
+              onChange={(e) => setFltBroker(e.target.value === "" ? "" : Number(e.target.value))}
+              options={[
+                { value: "", label: "All Brokers" },
+                ...Object.values(brokers).map(b => ({ value: String(b.id), label: b.name }))
+              ]}
+              icon={<User className="w-4 h-4" />}
+            />
 
-            {/* quick total preview */}
-            <Box sx={{ mt: 0.5, color: "text.secondary" }}>
+            <Input
+              label="From"
+              type="date"
+              value={fltFrom}
+              onChange={(e) => setFltFrom(e.target.value)}
+              icon={<Calendar className="w-4 h-4" />}
+            />
+
+            <Input
+              label="To"
+              type="date"
+              value={fltTo}
+              onChange={(e) => setFltTo(e.target.value)}
+              icon={<Calendar className="w-4 h-4" />}
+            />
+          </div>
+
+          <Input
+            placeholder="Search (instrument / account / broker / note)..."
+            value={fltText}
+            onChange={(e) => setFltText(e.target.value)}
+            icon={<Search className="w-4 h-4 text-slate-500" />}
+            className="bg-slate-950/50 border-slate-800 focus:border-brand-500/50"
+          />
+        </div>
+      </Card>
+
+      {/* Table Container */}
+      <Card className="flex-1 overflow-hidden bg-slate-900/40 border-slate-800/50 backdrop-blur-sm min-h-0 flex flex-col">
+        <div className="overflow-auto flex-1 custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[1200px]">
+            <thead className="sticky top-0 z-20 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
+              <tr>
+                {cols.date && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Date</th>}
+                {cols.type && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Type</th>}
+                {cols.account && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Account</th>}
+                {cols.broker && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Broker</th>}
+                {cols.instrument && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Instrument</th>}
+                {cols.assetClass && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Asset Class</th>}
+                {cols.subClass && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Sub-Class</th>}
+                {cols.qty && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Qty</th>}
+                {cols.unitPrice && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Unit Price / Amount</th>}
+                {cols.totalLocal && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Total</th>}
+                {cols.ccy && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">CCY</th>}
+                {showBaseCols && cols.fx && (
+                  <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">
+                    FX → {baseCurrency}
+                  </th>
+                )}
+                {showBaseCols && cols.totalBase && (
+                  <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">
+                    Total ({baseCurrency})
+                  </th>
+                )}
+                {cols.note && <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Note</th>}
+                <th className="py-4 px-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50">
+              {filtered
+                .slice()
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .map((a) => {
+                  const inst = a.instrument_id ? instMap[a.instrument_id] : undefined;
+                  const trade = a.type === "Buy" || a.type === "Sell";
+                  const qVal = a.quantity ?? 0;
+                  const totalLocal = computeTotalLocal(a);
+                  const fx = isCalc(a) ? a.fx_rate : null;
+                  const totalBase = isCalc(a) ? a.net_amount_base : (fx != null ? totalLocal * fx : null);
+
+                  return (
+                    <tr key={a.id} className="group hover:bg-white/[0.02] transition-colors">
+                      {cols.date && <td className="py-4 px-6 text-sm font-bold text-slate-300 tabular-nums">{a.date}</td>}
+                      {cols.type && (
+                        <td className="py-4 px-6 text-center">
+                          <span className={`inline-flex px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${a.type === "Buy" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" :
+                            a.type === "Sell" ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                              a.type === "Dividend" ? "bg-brand-500/10 border-brand-500/20 text-brand-500" :
+                                "bg-slate-700/50 border-slate-600/50 text-slate-300"
+                            }`}>
+                            {a.type}
+                          </span>
+                        </td>
+                      )}
+                      {cols.account && <td className="py-4 px-6 text-sm font-medium text-slate-400">{accounts[a.account_id]?.name || a.account_id}</td>}
+                      {cols.broker && <td className="py-4 px-6 text-sm font-medium text-slate-500">{a.broker_id ? (brokers[a.broker_id]?.name || "—") : "—"}</td>}
+                      {cols.instrument && (
+                        <td className="py-4 px-6 font-bold">
+                          <span className="text-white">
+                            {inst?.symbol ? inst.symbol : (inst?.name || "—")}
+                          </span>
+                          {inst?.symbol && inst?.name && <span className="text-slate-500 text-xs ml-2 font-medium">{inst.name}</span>}
+                        </td>
+                      )}
+                      {cols.assetClass && <td className="py-4 px-6 text-xs font-bold text-slate-500">{inst?.asset_class || ""}</td>}
+                      {cols.subClass && <td className="py-4 px-6 text-xs text-slate-600">{inst?.asset_subclass || ""}</td>}
+                      {cols.qty && <td className="py-4 px-6 text-right tabular-nums text-sm font-bold text-slate-300">{trade ? nf2.format(qVal) : "—"}</td>}
+                      {cols.unitPrice && (
+                        <td className="py-4 px-6 text-right tabular-nums text-sm font-bold text-slate-300">
+                          {a.unit_price != null ? nf2.format(Number(a.unit_price)) : "—"}
+                        </td>
+                      )}
+                      {cols.totalLocal && <td className="py-4 px-6 text-right tabular-nums text-sm font-black text-white">{nf2.format(totalLocal)}</td>}
+                      {cols.ccy && <td className="py-4 px-6 text-center text-xs font-bold text-slate-500 uppercase">{a.currency_code}</td>}
+                      {showBaseCols && cols.fx && (
+                        <td className="py-4 px-6 text-right tabular-nums text-sm font-medium text-slate-500">
+                          {fx != null ? nf2.format(fx) : "—"}
+                        </td>
+                      )}
+                      {showBaseCols && cols.totalBase && (
+                        <td className="py-4 px-6 text-right tabular-nums text-sm font-black text-brand-400">
+                          {totalBase != null ? nf2.format(totalBase) : "—"}
+                        </td>
+                      )}
+                      {cols.note && <td className="py-4 px-6 text-sm text-slate-500 italic max-w-xs truncate">{a.note}</td>}
+                      <td className="py-4 px-6 text-right">
+                        <button
+                          onClick={() => openEdit(a)}
+                          className="p-1 px-3 bg-brand-500/10 hover:bg-brand-500/20 text-brand-500 rounded-lg transition-colors text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-2"
+                        >
+                          <Edit size={12} />
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Edit Modal (Standard Modal) */}
+      <Modal
+        isOpen={editOpen}
+        onClose={closeEdit}
+
+        title="Edit Activity"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={closeEdit} disabled={editLoading}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={editLoading} className="bg-brand-600 hover:bg-brand-500 text-white min-w-[100px]">
+              {editLoading ? "Saving..." : "Save Changes"}
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-6">
+          {!!editErr && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 text-sm font-medium">
+              <AlertCircle size={20} />
+              {editErr}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Select
+              label="Type *"
+              value={editType}
+              onChange={(e) => setEditType(e.target.value as any)}
+              options={["Buy", "Sell", "Dividend", "Interest", "Fee"].map(t => ({ value: t, label: t }))}
+              icon={<Tag className="w-4 h-4" />}
+            />
+
+            <Select
+              label="Account *"
+              value={String(editAccountId)}
+              onChange={(e) => setEditAccountId(Number(e.target.value))}
+              options={Object.values(accounts).map(a => ({ value: String(a.id), label: a.name }))}
+              icon={<Briefcase className="w-4 h-4" />}
+            />
+
+            <Select
+              label="Broker"
+              value={String(editBrokerId)}
+              onChange={(e) => setEditBrokerId(e.target.value === "" ? "" : Number(e.target.value))}
+              options={[
+                { value: "", label: "(None)" },
+                ...Object.values(brokers).map(b => ({ value: String(b.id), label: b.name }))
+              ]}
+              icon={<User className="w-4 h-4" />}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input
+              label="Date *"
+              type="date"
+              value={editDate}
+              onChange={(e) => setEditDate(e.target.value)}
+              icon={<Calendar className="w-4 h-4" />}
+            />
+
+            <Select
+              label="Currency *"
+              value={editCcy}
+              onChange={(e) => setEditCcy(e.target.value)}
+              disabled={lockCcy}
+              options={[...new Set(Object.values(accounts).map(a => a.currency_code).filter(Boolean))].map(ccy => ({ value: ccy!, label: ccy! }))}
+              icon={<DollarSign className="w-4 h-4" />}
+            />
+          </div>
+
+          <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50">
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 px-1">Instrument</p>
+            <div className="p-3 bg-slate-900/50 rounded-xl text-slate-100 font-bold border border-slate-800/50 flex items-center justify-between">
+              <span>{editInstrumentSearch || "No instrument selected"}</span>
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Locked</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-2 ml-1 italic italic">
+              Instrument selection is currently view-only for edited activities.
+            </p>
+          </div>
+
+          {(editType === "Buy" || editType === "Sell") ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input
+                label="Quantity *"
+                type="number"
+                step="any"
+                value={editQty}
+                onChange={(e) => setEditQty(e.target.value)}
+                icon={<Hash size={16} className="text-slate-500" />}
+              />
+              <Input
+                label="Unit Price *"
+                type="number"
+                step="any"
+                value={editUnitPrice}
+                onChange={(e) => setEditUnitPrice(e.target.value)}
+                icon={<DollarSign size={16} className="text-slate-500" />}
+              />
+            </div>
+          ) : (
+            <Input
+              label="Amount *"
+              type="number"
+              step="any"
+              value={editUnitPrice}
+              onChange={(e) => setEditUnitPrice(e.target.value)}
+              icon={<DollarSign size={16} className="text-slate-500" />}
+              helperText={editType === "Dividend" ? "Dividend cash amount" : editType === "Interest" ? "Interest cash amount" : "Fee amount"}
+            />
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input
+              label="Fee"
+              type="number"
+              step="any"
+              value={editFee}
+              onChange={(e) => setEditFee(e.target.value)}
+              icon={<Info size={16} className="text-slate-500" />}
+            />
+            <Input
+              label="Note"
+              value={editNote}
+              onChange={(e) => setEditNote(e.target.value)}
+              placeholder="Internal memo..."
+            />
+          </div>
+
+          <div className="bg-brand-500/5 p-4 rounded-2xl border border-brand-500/10 flex items-center justify-between">
+            <span className="text-xs font-black uppercase text-brand-500/70 tracking-widest">Total Transaction Preview</span>
+            <span className="text-lg font-black text-white tabular-nums">
               {(() => {
                 const fee = Number(editFee || 0);
-                if (editType === "Buy" || editType === "Sell") {
-                  const q = Number(editQty || 0), px = Number(editUnitPrice || 0);
-                  return <Typography variant="body2">Total: {nf2.format(q * px + fee)} {editCcy}</Typography>;
-                }
-                const amt = Math.abs(Number(editUnitPrice || 0));
-                return <Typography variant="body2">Total: {nf2.format(amt + fee)} {editCcy}</Typography>;
+                const q = Number(editQty || 0);
+                const px = Number(editUnitPrice || 0);
+                const total = (editType === "Buy" || editType === "Sell") ? (q * px + fee) : (Math.abs(px) + fee);
+                return `${nf2.format(total)} ${editCcy}`;
               })()}
-            </Box>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeEdit} disabled={editLoading}>Cancel</Button>
-          <Button variant="contained" onClick={saveEdit} disabled={editLoading}>
-            {editLoading ? "Saving…" : "Save"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+            </span>
+          </div>
+        </div>
+      </Modal>
+    </div>
   );
 }

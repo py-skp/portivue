@@ -26,9 +26,9 @@ target_metadata = SQLModel.metadata
 
 # --- DB URL source ---
 def get_url() -> str:
-    # Prefer DATABASE_URL from settings, fallback to alembic.ini
+    # Prefer database_url from settings, fallback to alembic.ini
     return (
-        getattr(settings, "DATABASE_URL", None)
+        getattr(settings, "database_url", None)
         or os.getenv("DATABASE_URL")
         or config.get_main_option("sqlalchemy.url")
     )

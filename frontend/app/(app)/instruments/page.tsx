@@ -1,16 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
-  Box, Paper, Typography, Table, TableBody, TableCell, TableHead, TableRow,
-  Chip, CircularProgress, Alert, Button, Stack, TextField, InputAdornment,
-  MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, IconButton
-} from "@mui/material";
-import SearchIcon from "@mui/icons-material/Search";
-import EditIcon from "@mui/icons-material/Edit";
-import AddIcon from "@mui/icons-material/Add";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import { api } from "@/lib/api";
+  Search,
+  Plus,
+  RefreshCw,
+  Edit,
+  Globe,
+  Coins,
+  Filter,
+  Database,
+  TrendingUp,
+  Calendar,
+  Hash,
+  Tag,
+  FileText,
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  CheckCircle2,
+  X
+} from "lucide-react";
+import { apiClient } from "@/lib/apiClient";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/forms/Select";
+import { Card } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
 
 export type Instrument = {
   id: number;
@@ -26,10 +42,10 @@ export type Instrument = {
   data_source: "yahoo" | "manual" | string;
 };
 
-type CurrencyOpt      = { code: string; name?: string };
-type AssetClassOpt    = { name: string };
+type CurrencyOpt = { code: string; name?: string };
+type AssetClassOpt = { name: string };
 type AssetSubclassOpt = { name: string };
-type SectorOpt        = { name: string };
+type SectorOpt = { name: string };
 
 const nf2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const nf4 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
@@ -45,6 +61,9 @@ export default function InstrumentsListPage() {
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(100);
   const [dataSource, setDataSource] = useState<string | "">("");
+
+  // success toast state
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // add
   const [addOpen, setAddOpen] = useState(false);
@@ -92,7 +111,7 @@ export default function InstrumentsListPage() {
       if (q.trim()) params.set("q", q.trim());
       if (limit) params.set("limit", String(limit));
       if (dataSource) params.set("data_source", dataSource);
-      const data = await api<Instrument[]>(`/instruments?${params.toString()}`, { signal });
+      const data = await apiClient.get<Instrument[]>(`/instruments?${params.toString()}`);
       setRows(data);
     } catch (e: any) {
       if (e?.name !== "AbortError") setErr(e.message || String(e));
@@ -101,80 +120,71 @@ export default function InstrumentsListPage() {
     }
   }
 
-async function loadMeta() {
-  setMetaLoading(true);
-  setAddErr(null);
+  async function loadMeta() {
+    setMetaLoading(true);
+    setAddErr(null);
 
-  try {
-    const [rc, rAc, rSub, rSec] = await Promise.all([
-      api<any[]>("/lookups/currencies"),
-      api<any[]>("/asset-classes"),
-      api<any[]>("/asset-subclasses"),
-      api<any[]>("/sectors"),
-    ]);
+    try {
+      const [rc, rAc, rSub, rSec] = await Promise.all([
+        apiClient.get<any[]>("/lookups/currencies"),
+        apiClient.get<any[]>("/asset-classes"),
+        apiClient.get<any[]>("/asset-subclasses"),
+        apiClient.get<any[]>("/sectors"),
+      ]);
 
-    // --- helpers ---
-    const uniqBy = <T extends Record<string, string>>(arr: T[], k: keyof T) =>
-      Array.from(new Map(arr.map(o => [String(o[k]), o])).values());
+      const uniqBy = <T extends Record<string, string>>(arr: T[], k: keyof T) =>
+        Array.from(new Map(arr.map(o => [String(o[k]), o])).values());
 
-    // Keep BOTH code and name for currencies
-    const cRaw: CurrencyOpt[] = Array.isArray(rc)
-      ? rc.map((x: any) => {
-          if (typeof x === "string") return { code: x };
-          // accept {code,name} or {label,code} or {name}
-          return {
-            code: x?.code ?? String(x?.label ?? x?.name ?? "").toUpperCase(),
-            name: x?.name ?? (x?.label && x?.label !== x?.code ? x.label : undefined),
-          } as CurrencyOpt;
-        })
-      : [];
-
-    const cNorm = uniqBy(cRaw.filter(c => !!c.code), "code")
-      .sort((a, b) => a.code.localeCompare(b.code));
-
-    // Prefer USD if available; otherwise first code
-    const preferredCurrency =
-      cNorm.find(c => c.code === "USD")?.code ?? cNorm[0]?.code ?? "";
-
-    // Asset classes / subclasses / sectors keep 'name'
-    const toNames = (raw: any[]): { name: string }[] =>
-      Array.isArray(raw)
-        ? raw.map((x: any) => ({ name: typeof x === "string" ? x : (x?.name ?? x?.label ?? String(x)) }))
+      const cRaw: CurrencyOpt[] = Array.isArray(rc)
+        ? rc.map((x: any) => ({
+          code: x?.code ?? String(x?.label ?? x?.name ?? "").toUpperCase(),
+          name: x?.name ?? (x?.label && x?.label !== x?.code ? x.label : undefined),
+        }))
         : [];
 
-    const aNorm = uniqBy(toNames(rAc), "name").sort((a, b) => a.name.localeCompare(b.name));
-    const subNorm = uniqBy(toNames(rSub), "name").sort((a, b) => a.name.localeCompare(b.name));
-    const secNorm = uniqBy(toNames(rSec), "name").sort((a, b) => a.name.localeCompare(b.name));
+      const cNorm = uniqBy(cRaw.filter(c => !!c.code), "code").sort((a, b) => a.code.localeCompare(b.code));
+      const preferredCurrency = cNorm.find(c => c.code === "USD")?.code ?? cNorm[0]?.code ?? "";
 
-    setCurrencies(cNorm);
-    setAssetClasses(aNorm);
-    setAssetSubclasses(subNorm);
-    setSectors(secNorm);
+      const toNames = (raw: any[]): { name: string }[] =>
+        Array.isArray(raw)
+          ? raw.map((x: any) => ({ name: typeof x === "string" ? x : (x?.name ?? x?.label ?? String(x)) }))
+          : [];
 
-    setAddForm(prev => ({
-      ...prev,
-      currency_code: prev.currency_code || preferredCurrency,
-    }));
-  } catch (e: any) {
-    setAddErr(e.message || String(e));
-  } finally {
-    setMetaLoading(false);
+      const aNorm = uniqBy(toNames(rAc), "name").sort((a, b) => a.name.localeCompare(b.name));
+      const subNorm = uniqBy(toNames(rSub), "name").sort((a, b) => a.name.localeCompare(b.name));
+      const secNorm = uniqBy(toNames(rSec), "name").sort((a, b) => a.name.localeCompare(b.name));
+
+      setCurrencies(cNorm);
+      setAssetClasses(aNorm);
+      setAssetSubclasses(subNorm);
+      setSectors(secNorm);
+
+      setAddForm(prev => ({
+        ...prev,
+        currency_code: prev.currency_code || preferredCurrency,
+      }));
+    } catch (e: any) {
+      setAddErr(e.message || String(e));
+    } finally {
+      setMetaLoading(false);
+    }
   }
-}
 
   useEffect(() => {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => load(ctrl.signal), 250);
-    return () => { ctrl.abort(); clearTimeout(t); };
+    const t = setTimeout(() => load(), 250);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, limit, dataSource]);
 
+  // Clear success message after 5 seconds
   useEffect(() => {
-    const ctrl = new AbortController();
-    load(ctrl.signal);
-    return () => ctrl.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (successMsg) {
+      const timer = setTimeout(() => {
+        setSuccessMsg(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMsg]);
 
   const openAdd = async () => { setAddErr(null); await loadMeta(); setAddOpen(true); };
   const closeAdd = () => setAddOpen(false);
@@ -199,15 +209,18 @@ async function loadMeta() {
         data_source: "manual",
         ...(addForm.latest_price ? { latest_price: parseFloat(addForm.latest_price) } : {}),
       };
+
       let created: Instrument;
       try {
-        created = await api<Instrument>("/instruments/manual", { method: "POST", body: JSON.stringify(payload) });
+        created = await apiClient.post<Instrument>("/instruments/manual", payload);
       } catch {
-        created = await api<Instrument>("/instruments", { method: "POST", body: JSON.stringify(payload) });
+        created = await apiClient.post<Instrument>("/instruments", payload);
       }
+
       setRows(prev => [created, ...prev]);
       setAddForm(f => ({ ...f, symbol: "", name: "", latest_price: "" }));
       setAddOpen(false);
+      setSuccessMsg(`Instrument "${created.name}" added successfully.`);
     } catch (e: any) {
       setAddErr(e.message || "Create failed");
     } finally {
@@ -217,7 +230,6 @@ async function loadMeta() {
 
   // --------- Edit (Manual only) ----------
   async function openEditInstrument(row: Instrument) {
-    // 🔒 Disable editing for Yahoo/public instruments (leave code in place for future enable)
     if (row.data_source !== "manual") return;
     setEditErr(null);
     await loadMeta();
@@ -232,28 +244,26 @@ async function loadMeta() {
   async function submitEditInstrument(e: React.FormEvent) {
     e.preventDefault();
     if (!editForm) return;
-    if (editForm.data_source !== "manual") return; // extra guard
+    if (editForm.data_source !== "manual") return;
     setEditSubmitting(true);
     setEditErr(null);
     try {
       try {
-        await api(`/instruments/${editForm.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            symbol: editForm.symbol,
-            name: editForm.name,
-            sector: editForm.sector,
-            currency_code: editForm.currency_code,
-            asset_class: editForm.asset_class,
-            asset_subclass: editForm.asset_subclass,
-            country: editForm.country,
-          }),
+        await apiClient.patch(`/instruments/${editForm.id}`, {
+          symbol: editForm.symbol,
+          name: editForm.name,
+          sector: editForm.sector,
+          currency_code: editForm.currency_code,
+          asset_class: editForm.asset_class,
+          asset_subclass: editForm.asset_subclass,
+          country: editForm.country,
         });
       } catch {
-        await api(`/instruments/${editForm.id}`, { method: "PUT", body: JSON.stringify(editForm) });
+        await apiClient.put(`/instruments/${editForm.id}`, editForm);
       }
       await load();
       closeEditInstrument();
+      setSuccessMsg(`Instrument "${editForm.name}" updated successfully.`);
     } catch (e: any) {
       setEditErr(e.message || "Update failed");
     } finally {
@@ -279,9 +289,10 @@ async function loadMeta() {
     setPriceErr(null);
     try {
       const body = { close, date: priceDate ? new Date(priceDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10) };
-      await api(`/instruments/${priceRow.id}/price_manual`, { method: "POST", body: JSON.stringify(body) });
+      await apiClient.post(`/instruments/${priceRow.id}/price_manual`, body);
       await load();
       closeEditPrice();
+      setSuccessMsg(`Price for "${priceRow.name}" updated to ${close.toFixed(4)}.`);
     } catch (e: any) {
       setPriceErr(e.message || "Update failed");
     } finally {
@@ -292,210 +303,503 @@ async function loadMeta() {
   const isYahooEdit = editForm && editForm.data_source !== "manual";
 
   return (
-    <Box sx={{ flex: 1, width: "100%", display: "flex", flexDirection: "column" }}>
-      <Paper elevation={1} sx={{ flex: 1, width: "100%", p: 2, overflow: "auto" }}>
+    <div className="flex-1 w-full flex flex-col space-y-6">
+      {/* Floating Success Toast */}
+      {successMsg && (
+        <div className="fixed top-6 right-6 z-[9999] animate-in slide-in-from-right-10 fade-in duration-500">
+          <div className="bg-slate-900/90 dark:bg-slate-900/95 backdrop-blur-xl border border-emerald-500/30 rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5),0_0_20px_rgba(16,185,129,0.1)] flex items-center gap-4 min-w-[320px] group relative overflow-hidden">
+            <div className="h-10 w-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500 shrink-0">
+              <CheckCircle2 size={24} />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-black text-emerald-500 uppercase tracking-widest mb-0.5">Success</p>
+              <p className="text-sm font-bold text-slate-100">{successMsg}</p>
+            </div>
+            <button
+              onClick={() => setSuccessMsg(null)}
+              className="p-1 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
+            >
+              <X size={18} />
+            </button>
+            <div
+              className="absolute bottom-0 left-0 h-1 bg-emerald-500/50"
+              style={{
+                width: '100%',
+                animation: 'shrink 5s linear forwards'
+              }}
+            />
+          </div>
+          <style dangerouslySetInnerHTML={{
+            __html: `
+            @keyframes shrink {
+              from { width: 100%; }
+              to { width: 0%; }
+            }
+          `}} />
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
+            <Globe className="w-8 h-8 text-brand-500" />
+            Instruments
+          </h1>
+          <p className="text-slate-400 mt-1">Manage symbols, asset classes, and manual price tracking.</p>
+        </div>
+        <Button onClick={openAdd} className="bg-brand-600 hover:bg-brand-500 text-white gap-2 py-6 px-8 rounded-2xl shadow-xl shadow-brand-600/20">
+          <Plus className="w-5 h-5" />
+          Add Instrument
+        </Button>
+      </div>
+
+      <Card className="flex-1 flex flex-col">
         {/* Toolbar */}
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-          <Typography variant="h6">Instruments</Typography>
-          <Stack direction="row" spacing={1}>
-            <TextField
-              size="small"
+        <div className="p-6 border-b border-slate-800 flex flex-col lg:flex-row items-center gap-6 bg-slate-900/50">
+          <div className="w-full lg:max-w-md">
+            <Input
               placeholder="Search name or symbol…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>) }}
-              sx={{ minWidth: 260 }}
+              icon={<Search className="w-4 h-4" />}
             />
-            <TextField select size="small" label="Source" value={dataSource} onChange={(e) => setDataSource(e.target.value)} sx={{ width: 140 }}>
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="manual">manual</MenuItem>
-              <MenuItem value="yahoo">yahoo</MenuItem>
-            </TextField>
-            <TextField select size="small" label="Limit" value={limit} onChange={(e) => setLimit(Number(e.target.value))} sx={{ width: 110 }}>
-              {[50, 100, 200, 500, 1000].map(n => (<MenuItem key={n} value={n}>{n}</MenuItem>))}
-            </TextField>
-            <Button size="small" startIcon={<RefreshIcon />} onClick={() => load()} disabled={loading}>Reload</Button>
-            <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Add Instrument</Button>
-          </Stack>
-        </Box>
+          </div>
 
-        {loading && (<Box sx={{ display: "flex", alignItems: "center", gap: 2 }}><CircularProgress size={20} /> Loading…</Box>)}
+          <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
+            <div className="w-40">
+              <Select
+                label="Source"
+                name="data_source"
+                value={dataSource}
+                onChange={(e) => setDataSource(e.target.value)}
+                register={() => { }} // simple select
+                options={[
+                  { value: "", label: "All Sources" },
+                  { value: "manual", label: "Manual" },
+                  { value: "yahoo", label: "Yahoo" },
+                ]}
+              />
+            </div>
 
-        {!!err && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {err} — check <code>NEXT_PUBLIC_API</code>, CORS, and that <code>/instruments</code> supports the filters.
-          </Alert>
-        )}
+            <div className="w-32">
+              <Select
+                label="Limit"
+                name="limit"
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                register={() => { }} // simple select
+                options={[50, 100, 200, 500, 1000].map(n => ({ value: n, label: String(n) }))}
+              />
+            </div>
 
-        {!loading && !err && rows.length === 0 && <Alert severity="info">No instruments found.</Alert>}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => load()}
+              disabled={loading}
+              className="gap-2 h-11"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Reload
+            </Button>
+          </div>
+        </div>
 
-        {!loading && !err && rows.length > 0 && (
-          <Box component={Paper} variant="outlined" sx={{ width: "100%", overflow: "auto" }}>
-            <Table stickyHeader size="small" sx={{ minWidth: 1300 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell width={70}>ID</TableCell>
-                  <TableCell width={140}>Symbol</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell width={160}>Sector</TableCell>
-                  <TableCell width={110}>Currency</TableCell>
-                  <TableCell width={160}>Asset Class</TableCell>
-                  <TableCell width={180}>Asset Subclass</TableCell>
-                  <TableCell width={140}>Country</TableCell>
-                  <TableCell align="right" width={160}>Latest Price</TableCell>
-                  <TableCell width={190}>Updated At</TableCell>
-                  <TableCell width={120}>Source</TableCell>
-                  <TableCell width={220}>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
+        {/* Status Messages */}
+        <div className="px-6">
+          {loading && !rows.length && (
+            <div className="py-20 flex flex-col items-center justify-center text-slate-500 gap-4">
+              <RefreshCw className="w-8 h-8 animate-spin text-brand-500" />
+              <p className="font-medium">Loading instruments...</p>
+            </div>
+          )}
+
+          {!!err && (
+            <div className="my-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-red-500">
+              <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-bold">Error loading instruments</p>
+                <p className="text-sm opacity-90">{err}</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && !err && rows.length === 0 && (
+            <div className="py-20 flex flex-col items-center justify-center text-slate-500 gap-4">
+              <Info className="w-8 h-8 text-slate-600" />
+              <p className="font-medium">No instruments found matching your criteria.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Table Content */}
+        {!loading && rows.length > 0 && (
+          <div className="flex-1 overflow-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse min-w-[1300px]">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-10">
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">ID</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Symbol</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Name</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Sector</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Currency</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Asset Class</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Subclass</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Country</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500 text-right">Latest Price</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Updated At</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500">Source</th>
+                  <th className="p-4 text-xs font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
                 {rows.map((r) => (
-                  <TableRow key={r.id} hover>
-                    <TableCell>{r.id}</TableCell>
-                    <TableCell>{r.symbol || "—"}</TableCell>
-                    <TableCell>{r.name}</TableCell>
-                    <TableCell>{r.sector || "—"}</TableCell>
-                    <TableCell>{r.currency_code}</TableCell>
-                    <TableCell>{r.asset_class || "—"}</TableCell>
-                    <TableCell>{r.asset_subclass || "—"}</TableCell>
-                    <TableCell>{r.country || "—"}</TableCell>
-                    <TableCell align="right">{fmtNum(r.latest_price, 4)}</TableCell>
-                    <TableCell>{fmtDateTime(r.latest_price_at)}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={r.data_source} color={r.data_source === "manual" ? "default" : "primary"} variant="outlined" sx={{ textTransform: "capitalize" }} />
-                    </TableCell>
-                    <TableCell>
-                      <Stack direction="row" spacing={1}>
+                  <tr key={r.id} className="group hover:bg-emerald-500/[0.02] transition-colors duration-150">
+                    <td className="p-4 text-sm font-medium text-slate-400">#{r.id}</td>
+                    <td className="p-4">
+                      <span className="text-sm font-black text-white bg-slate-800 px-2 py-1 rounded-lg">
+                        {r.symbol || "—"}
+                      </span>
+                    </td>
+                    <td className="p-4 text-sm font-bold text-slate-200">{r.name}</td>
+                    <td className="p-4 text-sm text-slate-400">{r.sector || "—"}</td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+                        <Coins className="w-3.5 h-3.5 text-brand-500/60" />
+                        {r.currency_code}
+                      </div>
+                    </td>
+                    <td className="p-4 text-sm text-slate-400">{r.asset_class || "—"}</td>
+                    <td className="p-4 text-sm text-slate-400">{r.asset_subclass || "—"}</td>
+                    <td className="p-4 text-sm text-slate-400">
+                      {r.country ? (
+                        <div className="flex items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-slate-500" />
+                          {r.country}
+                        </div>
+                      ) : "—"}
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="text-sm font-black text-white">
+                        {fmtNum(r.latest_price, 2)}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm text-slate-300">{fmtDateTime(r.latest_price_at).split(',')[0]}</span>
+                        <span className="text-[10px] text-slate-500 uppercase font-bold">{fmtDateTime(r.latest_price_at).split(',')[1]}</span>
+                      </div>
+                    </td>
+                    <td className="p-4 text-sm">
+                      <span className={`
+                        px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border
+                        ${r.data_source === 'manual'
+                          ? 'bg-slate-800 border-slate-700 text-slate-400'
+                          : 'bg-brand-500/10 border-brand-500/20 text-brand-500'}
+                      `}>
+                        {r.data_source}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<EditIcon />}
+                          variant="ghost"
+                          size="sm"
                           onClick={() => openEditInstrument(r)}
                           disabled={r.data_source !== "manual"}
-                          title={r.data_source !== "manual" ? "Editing is disabled for Yahoo instruments" : ""}
+                          className="h-9 w-9 p-0 rounded-xl"
+                          title={r.data_source !== "manual" ? "Editing is disabled for Yahoo instruments" : "Edit Details"}
                         >
-                          Edit
+                          <Edit className="w-4 h-4 text-slate-400" />
                         </Button>
                         <Button
-                          size="small"
-                          variant="outlined"
+                          variant="ghost"
+                          size="sm"
                           onClick={() => openEditPrice(r)}
                           disabled={r.data_source !== "manual"}
-                          title={r.data_source !== "manual" ? "Manual price only for manual instruments" : ""}
+                          className="h-9 w-9 p-0 rounded-xl"
+                          title={r.data_source !== "manual" ? "Manual price only for manual instruments" : "Update Price"}
                         >
-                          Update Price
+                          <TrendingUp className="w-4 h-4 text-emerald-500" />
                         </Button>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
-          </Box>
+              </tbody>
+            </table>
+          </div>
         )}
+      </Card>
 
-        {/* ---------- Add Instrument Dialog ---------- */}
-        <Dialog open={addOpen} onClose={closeAdd} maxWidth="sm" fullWidth>
-          <DialogTitle>Add Instrument (Manual)</DialogTitle>
-          <DialogContent dividers>
-            {!!addErr && <Alert severity="error" sx={{ mb: 2 }}>{addErr}</Alert>}
-            {metaLoading && (<Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}><CircularProgress size={18} /> Loading options…</Box>)}
-            <Box component="form" id="add-instrument-form" onSubmit={submitAdd}>
-              <Stack spacing={2} sx={{ mt: 1 }}>
-                <TextField label="Name" name="name" value={addForm.name} onChange={onAddChange} required fullWidth />
-                <TextField label="Symbol (optional)" name="symbol" value={addForm.symbol} onChange={onAddChange} fullWidth />
-                <TextField select label="Currency" name="currency_code" value={addForm.currency_code} onChange={onAddChange} required fullWidth disabled={metaLoading}>
-                  <MenuItem value="" disabled>Choose currency</MenuItem>
-                  {currencies.map((c) => (<MenuItem key={c.code} value={c.code}>{c.code}{c.name ? ` — ${c.name}` : ""}</MenuItem>))}
-                </TextField>
-                <TextField select label="Asset Class" name="asset_class" value={addForm.asset_class} onChange={onAddChange} fullWidth disabled={metaLoading}>
-                  <MenuItem value="">—</MenuItem>
-                  {assetClasses.map((a) => (<MenuItem key={a.name} value={a.name}>{a.name}</MenuItem>))}
-                </TextField>
-                <TextField select label="Asset Subclass" name="asset_subclass" value={addForm.asset_subclass} onChange={onAddChange} fullWidth disabled={metaLoading || assetSubclasses.length === 0}>
-                  <MenuItem value="">—</MenuItem>
-                  {assetSubclasses.map((s) => (<MenuItem key={s.name} value={s.name}>{s.name}</MenuItem>))}
-                </TextField>
-                <TextField select label="Sector" name="sector" value={addForm.sector} onChange={onAddChange} fullWidth disabled={metaLoading || sectors.length === 0}>
-                  <MenuItem value="">—</MenuItem>
-                  {sectors.map((s) => (<MenuItem key={s.name} value={s.name}>{s.name}</MenuItem>))}
-                </TextField>
-                <TextField label="Country" name="country" value={addForm.country} onChange={onAddChange} fullWidth />
-                <TextField type="number" inputProps={{ step: "0.0001" }} label="Latest Price (optional)" name="latest_price" value={addForm.latest_price} onChange={onAddChange} fullWidth />
-              </Stack>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={closeAdd} disabled={addSubmitting}>Cancel</Button>
-            <Button type="submit" form="add-instrument-form" variant="contained" disabled={addSubmitting || metaLoading || !addForm.name || !addForm.currency_code}>
-              {addSubmitting ? "Saving…" : "Save"}
-            </Button>
-          </DialogActions>
-        </Dialog>
+      {/* ---------- Modals ---------- */}
 
-        {/* ---------- Edit Instrument Dialog (Manual only) ---------- */}
-        <Dialog open={editOpen} onClose={closeEditInstrument} maxWidth="sm" fullWidth>
-          <DialogTitle>Edit Instrument</DialogTitle>
-          <DialogContent dividers>
-            {!!editErr && <Alert severity="error" sx={{ mb: 2 }}>{editErr}</Alert>}
-            {isYahooEdit && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Editing is currently disabled for Yahoo/public instruments. (Manual instruments only)
-              </Alert>
-            )}
-            <Box component="form" id="edit-instrument-form" onSubmit={submitEditInstrument}>
-              <Stack spacing={2} sx={{ mt: 1 }}>
-                <TextField label="Name" name="name" value={editForm?.name || ""} onChange={onEditChange} required fullWidth disabled={!!isYahooEdit} />
-                <TextField label="Symbol (optional)" name="symbol" value={editForm?.symbol || ""} onChange={onEditChange} fullWidth disabled={!!isYahooEdit} />
-                <TextField select label="Currency" name="currency_code" value={editForm?.currency_code || ""} onChange={onEditChange} required fullWidth disabled={!!isYahooEdit}>
-                  <MenuItem value="" disabled>Choose currency</MenuItem>
-                  {currencies.map((c) => (<MenuItem key={c.code} value={c.code}>{c.code}{c.name ? ` — ${c.name}` : ""}</MenuItem>))}
-                </TextField>
-                <TextField select label="Asset Class" name="asset_class" value={editForm?.asset_class || ""} onChange={onEditChange} fullWidth disabled={!!isYahooEdit}>
-                  <MenuItem value="">—</MenuItem>
-                  {assetClasses.map((a) => (<MenuItem key={a.name} value={a.name}>{a.name}</MenuItem>))}
-                </TextField>
-                <TextField select label="Asset Subclass" name="asset_subclass" value={editForm?.asset_subclass || ""} onChange={onEditChange} fullWidth disabled={!!isYahooEdit}>
-                  <MenuItem value="">—</MenuItem>
-                  {assetSubclasses.map((s) => (<MenuItem key={s.name} value={s.name}>{s.name}</MenuItem>))}
-                </TextField>
-                <TextField select label="Sector" name="sector" value={editForm?.sector || ""} onChange={onEditChange} fullWidth disabled={!!isYahooEdit}>
-                  <MenuItem value="">—</MenuItem>
-                  {sectors.map((s) => (<MenuItem key={s.name} value={s.name}>{s.name}</MenuItem>))}
-                </TextField>
-                <TextField label="Country" name="country" value={editForm?.country || ""} onChange={onEditChange} fullWidth disabled={!!isYahooEdit} />
-              </Stack>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={closeEditInstrument} disabled={editSubmitting}>Cancel</Button>
-            <Button type="submit" form="edit-instrument-form" variant="contained" disabled={editSubmitting || !!isYahooEdit}>
-              {editSubmitting ? "Saving…" : "Save"}
+      {/* Add Instrument Modal */}
+      <Modal
+        isOpen={addOpen}
+        onClose={closeAdd}
+        title="Add Instrument (Manual)"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={closeAdd} disabled={addSubmitting}>
+              Cancel
             </Button>
-          </DialogActions>
-        </Dialog>
+            <Button
+              onClick={submitAdd}
+              disabled={addSubmitting || metaLoading || !addForm.name || !addForm.currency_code}
+              className="bg-brand-600 hover:bg-brand-500 text-white min-w-[100px]"
+            >
+              {addSubmitting ? "Saving..." : "Save Instrument"}
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-6">
+          {!!addErr && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 text-sm font-medium">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              {addErr}
+            </div>
+          )}
 
-        {/* ---------- Update Price (Manual) ---------- */}
-        <Dialog open={priceOpen} onClose={closeEditPrice} maxWidth="xs" fullWidth>
-          <DialogTitle>Update Price (Manual)</DialogTitle>
-          <DialogContent dividers>
-            {!!priceErr && <Alert severity="error" sx={{ mb: 2 }}>{priceErr}</Alert>}
-            <Stack spacing={2} sx={{ mt: 1 }}>
-              <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                {priceRow?.name} {priceRow?.symbol ? `(${priceRow.symbol})` : ""} · {priceRow?.currency_code}
-              </Typography>
-              <TextField label="New Price" type="number" inputProps={{ step: "0.0001" }} value={priceVal} onChange={(e) => setPriceVal(e.target.value)} autoFocus required fullWidth />
-              <TextField label="Date (optional)" type="date" value={priceDate} onChange={(e) => setPriceDate(e.target.value)} helperText="If blank, server will use today." fullWidth InputLabelProps={{ shrink: true }} />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={closeEditPrice} disabled={priceSubmitting}>Cancel</Button>
-            <Button variant="contained" onClick={submitEditPrice} disabled={priceSubmitting || !priceVal}>
-              {priceSubmitting ? "Updating…" : "Update"}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input label="Name *" name="name" value={addForm.name} onChange={onAddChange} required placeholder="e.g. Bitcoin" icon={<Tag className="w-4 h-4" />} />
+            <Input label="Symbol (optional)" name="symbol" value={addForm.symbol} onChange={onAddChange} placeholder="e.g. BTC" icon={<Hash className="w-4 h-4" />} />
+          </div>
+
+          <Select
+            label="Currency *"
+            name="currency_code"
+            value={addForm.currency_code}
+            onChange={onAddChange}
+            register={() => { }} // custom handling
+            required
+            disabled={metaLoading}
+            options={[
+              { value: "", label: "Choose currency" },
+              ...currencies.map((c) => ({ value: c.code, label: `${c.code}${c.name ? ` — ${c.name}` : ""}` }))
+            ]}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Select
+              label="Asset Class"
+              name="asset_class"
+              value={addForm.asset_class}
+              onChange={onAddChange}
+              register={() => { }}
+              disabled={metaLoading}
+              options={[
+                { value: "", label: "—" },
+                ...assetClasses.map((a) => ({ value: a.name, label: a.name }))
+              ]}
+            />
+            <Select
+              label="Asset Subclass"
+              name="asset_subclass"
+              value={addForm.asset_subclass}
+              onChange={onAddChange}
+              register={() => { }}
+              disabled={metaLoading || assetSubclasses.length === 0}
+              options={[
+                { value: "", label: "—" },
+                ...assetSubclasses.map((s) => ({ value: s.name, label: s.name }))
+              ]}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Select
+              label="Sector"
+              name="sector"
+              value={addForm.sector}
+              onChange={onAddChange}
+              register={() => { }}
+              disabled={metaLoading || sectors.length === 0}
+              options={[
+                { value: "", label: "—" },
+                ...sectors.map((s) => ({ value: s.name, label: s.name }))
+              ]}
+            />
+            <Input label="Country" name="country" value={addForm.country} onChange={onAddChange} placeholder="e.g. United States" icon={<Globe className="w-4 h-4" />} />
+          </div>
+
+          <Input
+            type="number"
+            label="Latest Price (optional)"
+            name="latest_price"
+            value={addForm.latest_price}
+            onChange={onAddChange}
+            placeholder="0.00"
+            step="0.0001"
+            icon={<TrendingUp className="w-4 h-4" />}
+          />
+        </div>
+      </Modal>
+
+      {/* Edit Instrument Modal */}
+      <Modal
+        isOpen={editOpen}
+        onClose={closeEditInstrument}
+        title="Edit Instrument"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={closeEditInstrument} disabled={editSubmitting}>
+              Cancel
             </Button>
-          </DialogActions>
-        </Dialog>
-      </Paper>
-    </Box>
+            <Button
+              onClick={submitEditInstrument}
+              disabled={editSubmitting || !!isYahooEdit}
+              className="bg-brand-600 hover:bg-brand-500 text-white min-w-[100px]"
+            >
+              {editSubmitting ? "Saving..." : "Save Changes"}
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-6">
+          {!!editErr && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 text-sm font-medium">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              {editErr}
+            </div>
+          )}
+
+          {isYahooEdit && (
+            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center gap-3 text-blue-400 text-sm font-medium">
+              <Info className="w-5 h-5 shrink-0" />
+              Editing is disabled for Yahoo/public instruments.
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input label="Name *" name="name" value={editForm?.name || ""} onChange={onEditChange} required disabled={!!isYahooEdit} icon={<Tag className="w-4 h-4" />} />
+            <Input label="Symbol (optional)" name="symbol" value={editForm?.symbol || ""} onChange={onEditChange} disabled={!!isYahooEdit} icon={<Hash className="w-4 h-4" />} />
+          </div>
+
+          <Select
+            label="Currency *"
+            name="currency_code"
+            value={editForm?.currency_code || ""}
+            onChange={onEditChange}
+            register={() => { }}
+            required
+            disabled={!!isYahooEdit}
+            options={[
+              { value: "", label: "Choose currency" },
+              ...currencies.map((c) => ({ value: c.code, label: `${c.code}${c.name ? ` — ${c.name}` : ""}` }))
+            ]}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Select
+              label="Asset Class"
+              name="asset_class"
+              value={editForm?.asset_class || ""}
+              onChange={onEditChange}
+              register={() => { }}
+              disabled={!!isYahooEdit}
+              options={[
+                { value: "", label: "—" },
+                ...assetClasses.map((a) => ({ value: a.name, label: a.name }))
+              ]}
+            />
+            <Select
+              label="Asset Subclass"
+              name="asset_subclass"
+              value={editForm?.asset_subclass || ""}
+              onChange={onEditChange}
+              register={() => { }}
+              disabled={!!isYahooEdit}
+              options={[
+                { value: "", label: "—" },
+                ...assetSubclasses.map((s) => ({ value: s.name, label: s.name }))
+              ]}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Select
+              label="Sector"
+              name="sector"
+              value={editForm?.sector || ""}
+              onChange={onEditChange}
+              register={() => { }}
+              disabled={!!isYahooEdit}
+              options={[
+                { value: "", label: "—" },
+                ...sectors.map((s) => ({ value: s.name, label: s.name }))
+              ]}
+            />
+            <Input label="Country" name="country" value={editForm?.country || ""} onChange={onEditChange} disabled={!!isYahooEdit} icon={<Globe className="w-4 h-4" />} />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Update Price Modal */}
+      <Modal
+        isOpen={priceOpen}
+        onClose={closeEditPrice}
+        title="Update Price (Manual)"
+        maxWidth="sm"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={closeEditPrice} disabled={priceSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={submitEditPrice}
+              disabled={priceSubmitting || !priceVal}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white min-w-[100px]"
+            >
+              {priceSubmitting ? "Updating..." : "Update Price"}
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-6">
+          {!!priceErr && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 text-sm font-medium">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              {priceErr}
+            </div>
+          )}
+
+          <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-1">Instrument</p>
+            <p className="text-lg font-bold text-white">
+              {priceRow?.name} <span className="text-brand-400 font-black">{priceRow?.symbol ? `(${priceRow.symbol})` : ""}</span>
+            </p>
+            <p className="text-sm text-slate-400 flex items-center gap-1.5 mt-1">
+              <Coins className="w-3.5 h-3.5" />
+              {priceRow?.currency_code} Balance Currency
+            </p>
+          </div>
+
+          <Input
+            label="New Price *"
+            type="number"
+            step="0.0001"
+            value={priceVal}
+            onChange={(e) => setPriceVal(e.target.value)}
+            autoFocus
+            required
+            icon={<TrendingUp className="w-4 h-4" />}
+          />
+
+          <Input
+            label="Date (optional)"
+            type="date"
+            value={priceDate}
+            onChange={(e) => setPriceDate(e.target.value)}
+            placeholder="Choose date"
+            icon={<Calendar className="w-4 h-4" />}
+          />
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider ml-1 -mt-4">
+            If blank, server will use today's date.
+          </p>
+        </div>
+      </Modal>
+    </div>
   );
 }

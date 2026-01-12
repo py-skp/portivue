@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Paper, Box, Typography, TextField, Button,
-  Alert, CircularProgress, Stack, MenuItem, Divider
-} from "@mui/material";
-
+import { Plus, CreditCard, Building2, AlertCircle, Loader2 } from "lucide-react";
 import { API_BASE } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
+
 const API = API_BASE;
 
-// ✅ NEW: 2-decimal, comma-separated formatter
 const nf2 = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -87,7 +86,6 @@ export default function AccountsCard() {
         body: JSON.stringify({
           ...form,
           name: form.name.trim(),
-          // ✅ ensure we send a clean 2-decimal number
           balance: round2(form.balance),
         }),
       });
@@ -107,88 +105,133 @@ export default function AccountsCard() {
   useEffect(() => { loadAll(); }, []);
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack spacing={2}>
-        <Typography variant="h6">Accounts</Typography>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+          <Building2 size={24} className="text-emerald-500" />
+          Accounts
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Manage your underlying financial accounts.</p>
+      </div>
 
-        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-          <TextField
-            label="Name"
-            size="small"
+      <Card className="p-6 bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 shadow-xl overflow-visible">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <Input
+            label="Account Name"
+            placeholder="e.g. Chase Savings"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="dark:bg-slate-800/50"
           />
 
-          <TextField
-            select
-            label="Currency"
-            size="small"
-            value={form.currency_code}
-            onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
-            disabled={loadingMeta || currencies.length === 0}
-            helperText={currencies.length === 0 ? "No currencies available — seed /lookups/currencies." : undefined}
-            sx={{ minWidth: 180 }}
-          >
-            {currencies.length === 0 ? (
-              <MenuItem value="" disabled>—</MenuItem>
-            ) : (
-              currencies.map((c) => (
-                <MenuItem key={c.code} value={c.code}>
-                  {c.code}{c.name ? ` — ${c.name}` : ""}
-                </MenuItem>
-              ))
-            )}
-          </TextField>
+          <div className="space-y-1.5 w-full">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Currency</label>
+            <select
+              value={form.currency_code}
+              onChange={(e) => setForm({ ...form, currency_code: e.target.value })}
+              disabled={loadingMeta || currencies.length === 0}
+              className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all appearance-none text-slate-900 dark:text-slate-200"
+            >
+              {currencies.length === 0 ? (
+                <option value="" disabled>No currencies</option>
+              ) : (
+                currencies.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code}{c.name ? ` — ${c.name}` : ""}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
 
-          <TextField
-            select
-            label="Type"
-            size="small"
-            value={form.type}
-            onChange={(e) => setForm({ ...form, type: e.target.value })}
-            sx={{ minWidth: 180 }}
-          >
-            {["Current","Savings","Fixed Deposit","Investment","Broker","Other"].map(opt => (
-              <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-            ))}
-          </TextField>
+          <div className="space-y-1.5 w-full">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Type</label>
+            <select
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all appearance-none text-slate-900 dark:text-slate-200"
+            >
+              {["Current", "Savings", "Fixed Deposit", "Investment", "Broker", "Other"].map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
 
-          <TextField
-            label="Balance"
+          <Input
+            label="Initial Balance"
             type="number"
-            size="small"
-            value={form.balance}
+            placeholder="0.00"
+            value={form.balance || ""}
             onChange={(e) => setForm({ ...form, balance: Number(e.target.value) })}
-            onBlur={() => setForm(f => ({ ...f, balance: round2(f.balance) }))} // ✅ normalize to 2 decimals on blur
-            inputProps={{ step: "0.01" }}
-            sx={{ width: 140 }}
+            onBlur={() => setForm(f => ({ ...f, balance: round2(f.balance) }))}
+            className="dark:bg-slate-800/50"
           />
+        </div>
 
+        <div className="mt-6 flex items-center justify-between gap-4">
+          <div className="flex-1">
+            {err && (
+              <div className="flex items-center gap-2 text-red-500 text-sm font-medium animate-in fade-in slide-in-from-left-2 transition-all">
+                <AlertCircle size={16} />
+                {err}
+              </div>
+            )}
+            {msg && (
+              <div className="flex items-center gap-2 text-emerald-500 text-sm font-medium animate-in fade-in slide-in-from-left-2 transition-all">
+                <Plus size={16} className="rotate-45" />
+                {msg}
+              </div>
+            )}
+          </div>
           <Button
-            variant="contained"
-            disabled={loading || !form.name || !form.currency_code || currencies.length === 0}
             onClick={createAccount}
+            isLoading={loading}
+            disabled={!form.name || !form.currency_code || currencies.length === 0}
+            className="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20"
           >
             Add Account
           </Button>
-        </Box>
+        </div>
+      </Card>
 
-        {(loading || loadingMeta) && <CircularProgress size={18} />}
-        {err && <Alert severity="error">{err}</Alert>}
-        {msg && <Alert severity="success">{msg}</Alert>}
-
-        <Divider />
-
-        <Stack spacing={1}>
-          {accounts.map(acc => (
-            <Paper key={acc.id} variant="outlined" sx={{ p:1, display:"flex", justifyContent:"space-between" }}>
-              <span><b>{acc.name}</b> — {acc.currency_code} ({acc.type})</span>
-              {/* ✅ Use formatted number */}
-              <span>{fmt2(acc.balance)}</span>
-            </Paper>
-          ))}
-        </Stack>
-      </Stack>
-    </Paper>
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500 ml-1">Existing Accounts</h4>
+        {loading && accounts.length === 0 ? (
+          <div className="flex items-center justify-center p-12">
+            <Loader2 className="animate-spin text-emerald-500" size={32} />
+          </div>
+        ) : accounts.length === 0 ? (
+          <div className="text-center p-12 bg-slate-50 dark:bg-slate-900/20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+            <p className="text-slate-400 font-medium">No accounts found.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {accounts.map(acc => (
+              <div
+                key={acc.id}
+                className="group flex items-center justify-between p-4 bg-white dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/50 rounded-2xl hover:border-emerald-500/30 transition-all shadow-sm hover:shadow-md"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors">
+                    <CreditCard size={20} />
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-slate-900 dark:text-slate-200">{acc.name}</h5>
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+                      {acc.currency_code} <span className="text-slate-300 dark:text-slate-700 mx-1">•</span> {acc.type}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-black text-slate-900 dark:text-white tabular-nums">
+                    {fmt2(acc.balance)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

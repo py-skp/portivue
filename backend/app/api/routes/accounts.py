@@ -10,6 +10,7 @@ from ...models.account import Account, AccountType
 from ...models.currency import Currency
 from ...models.user import User
 from ...schemas.account import AccountCreate, AccountRead, AccountUpdate
+from ...core.audit_logger import log_account_created, log_account_deleted
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -83,6 +84,10 @@ def create_account(
     session.add(obj)
     session.commit()
     session.refresh(obj)
+    
+    # Audit log
+    log_account_created(user.id, obj.id, obj.name)
+    
     return obj
 
 
@@ -147,6 +152,10 @@ def delete_account(
     obj = session.get(Account, account_id)
     if not obj or obj.owner_user_id != user.id:
         raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Audit log before deletion
+    log_account_deleted(user.id, obj.id, obj.name)
+    
     session.delete(obj)
     session.commit()
     return None

@@ -7,7 +7,7 @@ export const buildTheme = (mode: Mode) =>
   createTheme({
     palette: {
       mode,
-      primary: { main: mode === "light" ? "#0071e3" : "#66aaff" }, // Finlytics blue
+      primary: { main: mode === "light" ? "#0071e3" : "#66aaff" }, // Portivue blue
       secondary: { main: mode === "light" ? "#6e6e73" : "#a1a1aa" },
       background: {
         default: mode === "light" ? "#ffffff" : "#0b0b0c",
@@ -69,25 +69,25 @@ export const buildTheme = (mode: Mode) =>
         },
       },
 
-MuiAppBar: {
-  defaultProps: { color: "default" },
-  styleOverrides: {
-    root: ({ theme }) => ({
-      backdropFilter: "saturate(180%) blur(12px)",
-      backgroundImage:
-        theme.palette.mode === "light"
-          ? "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.78))"
-          : "linear-gradient(180deg, rgba(20,20,22,0.86), rgba(20,20,22,0.78))",
-      backgroundColor: "transparent",
-      color: theme.palette.mode === "light" ? "#1d1d1f" : "#f4f4f5",
-      borderBottom: `1px solid ${theme.palette.mode === "light" ? "#e5e5e7" : "#2a2a2d"}`,
-      boxShadow:
-        theme.palette.mode === "light"
-          ? "0 8px 20px rgba(0,0,0,0.06)"
-          : "0 8px 20px rgba(0,0,0,0.5)",
-    }),
-  },
-},
+      MuiAppBar: {
+        defaultProps: { color: "default" },
+        styleOverrides: {
+          root: ({ theme }) => ({
+            backdropFilter: "saturate(180%) blur(12px)",
+            backgroundImage:
+              theme.palette.mode === "light"
+                ? "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.78))"
+                : "linear-gradient(180deg, rgba(20,20,22,0.86), rgba(20,20,22,0.78))",
+            backgroundColor: "transparent",
+            color: theme.palette.mode === "light" ? "#1d1d1f" : "#f4f4f5",
+            borderBottom: `1px solid ${theme.palette.mode === "light" ? "#e5e5e7" : "#2a2a2d"}`,
+            boxShadow:
+              theme.palette.mode === "light"
+                ? "0 8px 20px rgba(0,0,0,0.06)"
+                : "0 8px 20px rgba(0,0,0,0.5)",
+          }),
+        },
+      },
 
       MuiPaper: {
         styleOverrides: {
@@ -143,26 +143,25 @@ MuiAppBar: {
             backgroundColor: mode === "light" ? "#f5f5f7" : "#1a1a1d",
           },
           root: {
-            borderBottom: `1px solid ${
-              mode === "light" ? "#e5e5e7" : "#2a2a2d"
-            }`,
+            borderBottom: `1px solid ${mode === "light" ? "#e5e5e7" : "#2a2a2d"
+              }`,
           },
         },
       },
 
       MuiDrawer: {
-  styleOverrides: {
-    paper: {
-      backdropFilter: "saturate(180%) blur(10px)",
-      backgroundImage:
-        mode === "light"
-          ? "linear-gradient(180deg, rgba(255,255,255,0.88), rgba(250,250,252,0.82))"
-          : "linear-gradient(180deg, rgba(20,20,22,0.88), rgba(18,18,20,0.82))",
-      backgroundColor: "transparent",
-      borderRight: `1px solid ${mode === "light" ? "#ececf0" : "#2a2a2d"}`,
-    },
-  },
-},
+        styleOverrides: {
+          paper: {
+            backdropFilter: "saturate(180%) blur(10px)",
+            backgroundImage:
+              mode === "light"
+                ? "linear-gradient(180deg, rgba(255,255,255,0.88), rgba(250,250,252,0.82))"
+                : "linear-gradient(180deg, rgba(20,20,22,0.88), rgba(18,18,20,0.82))",
+            backgroundColor: "transparent",
+            borderRight: `1px solid ${mode === "light" ? "#ececf0" : "#2a2a2d"}`,
+          },
+        },
+      },
 
       // MuiDrawer: {
       //   styleOverrides: {

@@ -1,66 +1,33 @@
 import * as React from "react";
-import { Box } from "@mui/material";
+
 type Props = {
-  hero: React.ReactNode; // headline, chips, terms
-  card: React.ReactNode; // auth card
+  hero: React.ReactNode;
+  card: React.ReactNode;
 };
 
 export function AuthLayout({ hero, card }: Props) {
   return (
-    <Box
-      className="authRoot"
-      sx={{
-        minHeight: "100vh",
-        position: "relative",
-        display: "grid",
-        // xs: stack vertically, card first. md+: hero | card (card on RIGHT)
-        gridTemplateAreas: { xs: `"card" "hero"`, md: `"hero card"` },
-        gridTemplateColumns: { xs: "1fr", md: "1.1fr 0.9fr" },
-        alignItems: "center", // keep both columns vertically centered
-        gap: 0,
-      }}
-    >
-      {/* Global background behind everything */}
-      <Box aria-hidden className="globalBg" />
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] bg-background text-foreground overflow-hidden relative">
+      {/* Dynamic Mesh Background */}
+      <div className="absolute inset-0 z-0 animate-mesh opacity-30" />
 
-      {/* HERO (left on md+, second on mobile) */}
-      <Box
-        sx={{
-          gridArea: "hero",
-          position: "relative",
-          p: { xs: 3, md: 6 },
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-          zIndex: 1,
-        }}
-      >
-        {/* disable mask on small screens to avoid overlaps */}
-        <Box
-          aria-hidden
-          className="subtleGridMask"
-          sx={{ display: { xs: "none", md: "block" } }}
-        />
-        <Box sx={{ maxWidth: 640, position: "relative", width: "100%", zIndex: 2 }}>
+      {/* Decorative Blur Orbs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-brand-500/20 rounded-full blur-[120px] z-0" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] z-0" />
+
+      {/* HERO SECTION */}
+      <div className="relative z-10 px-8 py-12 md:px-16 lg:px-24 flex items-center justify-center lg:justify-start overflow-hidden">
+        <div className="max-w-[800px] w-full">
           {hero}
-        </Box>
-      </Box>
+        </div>
+      </div>
 
-      {/* CARD (right on md+, first on mobile) */}
-      <Box
-        sx={{
-          gridArea: "card",
-          position: "relative",
-          p: { xs: 3, md: 6 },
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 3, // above hero mask & background
-        }}
-      >
-        {card}
-      </Box>
-    </Box>
+      {/* CARD SECTION */}
+      <div className="relative z-20 px-6 py-10 md:px-16 flex items-center justify-center lg:justify-start bg-slate-950/20 backdrop-blur-sm lg:border-l lg:border-white/5">
+        <div className="w-full max-w-[440px]">
+          {card}
+        </div>
+      </div>
+    </div>
   );
 }

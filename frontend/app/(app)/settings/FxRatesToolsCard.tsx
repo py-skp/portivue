@@ -1,18 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Paper, Box, Typography, TextField, Button,
-  Alert, CircularProgress, Stack, Divider, Chip, Collapse, Link
-} from "@mui/material";
+import { RefreshCw, Calendar, AlertCircle, CheckCircle, Database, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
-import { API_BASE } from "@/lib/api";
-const API = API_BASE; // resolves to "/api" if unset, no trailing slash
-
-// const API = process.env.NEXT_PUBLIC_API!;
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
 
 type FetchForDateResp = { date: string; count: number };
-type RefreshResp      = { base: string; date: string; count: number };
+type RefreshResp = { base: string; date: string; count: number };
 
 export default function FxRatesToolsCard() {
   const [on, setOn] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -20,17 +16,12 @@ export default function FxRatesToolsCard() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // nice summary objects (and raw payload if you want to inspect)
   const [summary, setSummary] = useState<{ title: string; items: Array<[string, string]> } | null>(null);
-  const [raw, setRaw] = useState<any>(null);
-  const [showRaw, setShowRaw] = useState(false);
 
   function resetUI() {
     setErr(null);
     setMsg(null);
     setSummary(null);
-    setRaw(null);
-    setShowRaw(false);
   }
 
   async function fetchForDate() {
@@ -40,13 +31,12 @@ export default function FxRatesToolsCard() {
       const data = await api<FetchForDateResp>(`/fx/fetch_for_date?on=${encodeURIComponent(on)}`, { method: "POST" });
       setMsg("Done — historical FX stored for the selected date.");
       setSummary({
-        title: "Historical snapshot",
+        title: "Historical Snapshot",
         items: [
           ["Date (UTC)", data.date],
-          ["Pairs upserted", String(data.count)],
+          ["Pairs Upserted", String(data.count)],
         ],
       });
-      setRaw(data);
     } catch (e: any) {
       setErr(e.message || "Request failed");
     } finally {
@@ -57,18 +47,16 @@ export default function FxRatesToolsCard() {
   async function refreshLatest() {
     setLoading(true); resetUI();
     try {
-      // OXR is USD-based on free plan; we also compute cross rates
       const data = await api<RefreshResp>(`/fx/refresh`, { method: "POST" });
       setMsg("Latest FX refreshed.");
       setSummary({
-        title: "Latest snapshot",
+        title: "Latest Snapshot",
         items: [
-          ["As-of date (UTC)", data.date],
-          ["App base (info)", data.base],
-          ["Pairs upserted", String(data.count)],
+          ["As-of Date (UTC)", data.date],
+          ["App Base (info)", data.base],
+          ["Pairs Upserted", String(data.count)],
         ],
       });
-      setRaw(data);
     } catch (e: any) {
       setErr(e.message || "Request failed");
     } finally {
@@ -77,99 +65,90 @@ export default function FxRatesToolsCard() {
   }
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack spacing={2}>
-        <Typography variant="h6">FX Rates Tools</Typography>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+          <RefreshCw size={24} className="text-emerald-500" />
+          FX Rates Tools
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Manage historical and latest currency exchange rates.</p>
+      </div>
 
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-          <TextField
-            label="Historical Date (UTC)"
-            type="date"
-            value={on}
-            onChange={(e) => setOn(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-          />
+      <Card className="p-6 bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 shadow-xl overflow-visible">
+        <div className="flex flex-col lg:flex-row gap-6 items-end">
+          <div className="flex-1 w-full lg:w-auto">
+            <Input
+              label="Historical Date (UTC)"
+              type="date"
+              value={on}
+              onChange={(e) => setOn(e.target.value)}
+              className="dark:bg-slate-800/50"
+              icon={<Calendar size={18} />}
+            />
+          </div>
 
-          <Button variant="contained" onClick={fetchForDate} disabled={loading || !on}>
-            Fetch historical for date
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <Button
+              onClick={fetchForDate}
+              disabled={loading || !on}
+              isLoading={loading}
+              className="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20 whitespace-nowrap"
+            >
+              Fetch Historical
+            </Button>
 
-          <Divider flexItem orientation="vertical" />
+            <div className="hidden sm:block w-px h-10 bg-slate-200 dark:bg-slate-800 mx-1" />
 
-          <Button variant="outlined" onClick={refreshLatest} disabled={loading}>
-            Refresh latest (today)
-          </Button>
+            <Button
+              variant="outline"
+              onClick={refreshLatest}
+              disabled={loading}
+              className="border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 whitespace-nowrap"
+            >
+              <RefreshCw size={16} className="mr-2" />
+              Refresh Latest
+            </Button>
+          </div>
+        </div>
 
-          {loading && (
-            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
-              <CircularProgress size={18} /> <span>Working…</span>
-            </Box>
-          )}
-        </Box>
-
-        {err && <Alert severity="error">{err}</Alert>}
-        {msg && <Alert severity="success">{msg}</Alert>}
+        {(err || msg) && (
+          <div className="mt-6 flex items-center gap-3">
+            {err && (
+              <div className="flex items-center gap-2 text-red-500 text-sm font-medium animate-in fade-in slide-in-from-left-2 transition-all">
+                <AlertCircle size={16} />
+                {err}
+              </div>
+            )}
+            {msg && (
+              <div className="flex items-center gap-2 text-emerald-500 text-sm font-medium animate-in fade-in slide-in-from-left-2 transition-all">
+                <CheckCircle size={16} />
+                {msg}
+              </div>
+            )}
+          </div>
+        )}
 
         {summary && (
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: 1,
-              bgcolor: "background.paper",
-              border: (t) => `1px solid ${t.palette.divider}`,
-            }}
-          >
-            <Typography variant="subtitle1" sx={{ mb: 1.5 }}>
+          <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-900/30 rounded-2xl border border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-2">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Database size={16} className="text-emerald-500" />
               {summary.title}
-            </Typography>
+            </h4>
 
-            <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+            <div className="flex flex-wrap gap-3">
               {summary.items.map(([label, value]) => (
-                <Chip
+                <div
                   key={label}
-                  label={
-                    <span>
-                      <strong>{label}:</strong> {value}
-                    </span>
-                  }
-                  variant="outlined"
-                />
-              ))}
-            </Box>
-
-            {raw && (
-              <Box sx={{ mt: 2 }}>
-                <Link
-                  component="button"
-                  variant="body2"
-                  onClick={() => setShowRaw((s) => !s)}
-                  sx={{ textDecoration: "underline" }}
+                  className="px-4 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700/50 shadow-sm"
                 >
-                  {showRaw ? "Hide details" : "Show details (JSON)"}
-                </Link>
-                <Collapse in={showRaw}>
-                  <Box
-                    sx={{
-                      mt: 1,
-                      p: 1.5,
-                      bgcolor: "grey.50",
-                      borderRadius: 1,
-                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                      fontSize: 13,
-                      whiteSpace: "pre-wrap",
-                      overflowX: "auto",
-                      border: (t) => `1px solid ${t.palette.divider}`,
-                    }}
-                  >
-                    {JSON.stringify(raw, null, 2)}
-                  </Box>
-                </Collapse>
-              </Box>
-            )}
-          </Box>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">{label}</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-slate-200">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
-      </Stack>
-    </Paper>
+      </Card>
+    </div>
   );
 }
