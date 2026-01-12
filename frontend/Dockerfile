@@ -4,8 +4,8 @@ WORKDIR /app
 
 # make npm more resilient
 RUN npm config set fetch-retries 5 \
- && npm config set fetch-retry-factor 2 \
- && npm config set fetch-timeout 60000
+    && npm config set fetch-retry-factor 2 \
+    && npm config set fetch-timeout 60000
 
 # ===== Build-time args with sane defaults =====
 ARG BACKEND_ORIGIN=http://backend:8000
@@ -43,7 +43,11 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json ./package-lock.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
-COPY --from=build /app/app/(public) ./public
+COPY --from=build /app/public ./public
 
-EXPOSE 3000
-CMD ["npm", "run", "start", "--", "-p", "3000"]
+# Use the non-root 'node' user provided by the base image
+USER node
+
+# EXPOSE is largely informational
+# The CMD uses the PORT env var if provided
+CMD ["sh", "-c", "npm run start -- -p ${PORT:-3000}"]

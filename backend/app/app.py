@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
 from app.core.db import init_db
@@ -107,6 +108,13 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+
+    # Trusted Host
+    # In production, this should be set to your actual domain
+    app.add_middleware(
+        TrustedHostMiddleware, 
+        allowed_hosts=settings.ALLOWED_HOSTS
     )
 
     # Routers

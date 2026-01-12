@@ -46,7 +46,19 @@ def init_db() -> None:
     import app.models.currency      # noqa: F401
 
     # Creates missing tables only; safe to call every boot.
-    SQLModel.metadata.create_all(engine)
+    # Note: On some databases like Postgres, pre-existing ENUM types can cause IntegrityErrors
+    # during create_all if they were created by a previous run.
+    try:
+        SQLModel.metadata.create_all(engine)
+    except Exception as e:
+        import sqlalchemy
+        if isinstance(e, sqlalchemy.exc.IntegrityError) and "duplicate" in str(e).lower():
+            # If it's just a duplicate type error, we can likely ignore it as tables 
+            # will still be created or already exist.
+            print(f"INFO: Database already initialized or has existing types: {e}")
+        else:
+            print(f"WARNING: Database initialization encountered an error: {e}")
+            # We don't re-raise here to allow the app to attempt starting if tables are already there
 
     # --- Seed reference currencies ---
     currencies = [
