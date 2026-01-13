@@ -270,10 +270,11 @@ export default function ActivitiesPage() {
     setEditInstrumentSearch(a.instrument_id ? (instMap[a.instrument_id]?.symbol || instMap[a.instrument_id]?.name || "") : "");
     setEditQty(a.quantity != null ? String(a.quantity) : "");
     setEditUnitPrice(a.unit_price != null ? String(a.unit_price) : "");
-    setEditCcy(a.currency_code);
+    const sc = a.instrument_id ? instMap[a.instrument_id]?.currency_code : null;
+    setEditCcy(sc || a.currency_code);
     setEditFee(a.fee != null ? String(a.fee) : "0");
     setEditNote(a.note || "");
-    setLockCcy(!!(a.instrument_id && instMap[a.instrument_id]?.currency_code));
+    setLockCcy(!!sc);
   }
   function closeEdit() {
     setEditOpen(false);
@@ -711,7 +712,7 @@ export default function ActivitiesPage() {
               value={editCcy}
               onChange={(e) => setEditCcy(e.target.value)}
               disabled={lockCcy}
-              options={[...new Set(Object.values(accounts).map(a => a.currency_code).filter(Boolean))].map(ccy => ({ value: ccy!, label: ccy! }))}
+              options={[...new Set([...Object.values(accounts).map(a => a.currency_code), editCcy].filter(Boolean))].map(ccy => ({ value: ccy!, label: ccy! }))}
               icon={<DollarSign className="w-4 h-4" />}
             />
           </div>
