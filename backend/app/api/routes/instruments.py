@@ -273,9 +273,7 @@ def upsert_from_yahoo(
 
     # --- Currency normalization for LSE listings ---
     ccy = (data.get("currency_code") or "").upper()
-    if sym.endswith(".L"):
-        ccy = "GBp"     # always store pence for London tickers
-    elif ccy == "GBX":
+    if ccy == "GBX":
         ccy = "GBp"
 
     inst = Instrument(
