@@ -210,8 +210,12 @@ def update_instrument(
     inst = session.get(Instrument, instrument_id)
     if not inst:
         raise HTTPException(404, "Instrument not found")
-    if not (inst.data_source == "manual" and inst.owner_user_id == user.id):
-        raise HTTPException(403, "Only your manual instruments can be edited")
+    # Allow editing manual instruments AND correcting Yahoo instruments (e.g. currency fix)
+    is_owner = (inst.data_source == "manual" and inst.owner_user_id == user.id)
+    is_yahoo = (inst.data_source == "yahoo")
+    
+    if not (is_owner or is_yahoo):
+        raise HTTPException(403, "You cannot edit this instrument")
 
     updates = payload.model_dump(exclude_unset=True)
 

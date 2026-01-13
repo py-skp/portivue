@@ -198,9 +198,10 @@ export default function ActivityForm() {
           {...register("currency_code", { required: true })}
           className="w-full rounded border p-2"
         >
-          {currencies.map((c: Currency) => (
-            <option key={c.code} value={c.code}>
-              {c.code}
+          {/* Ensure GBp is always available if needed for LSE stocks */}
+          {Array.from(new Set([...currencies.map(c => c.code), "GBp", "USD", "EUR", "GBP"])).sort().map((code) => (
+            <option key={code} value={code}>
+              {code}
             </option>
           ))}
         </select>
