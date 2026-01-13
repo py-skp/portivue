@@ -222,7 +222,7 @@ export default function NewActivityPage() {
       setValue("instrument_search", inst.symbol || inst.name);
       if (inst.currency_code) {
         setValue("currency_code", inst.currency_code);
-        setLockCurrency(true);
+        // setLockCurrency(true); // Don't lock, allow override
       }
       setIsSearchOpen(false);
     } catch (e: any) {
@@ -451,7 +451,7 @@ export default function NewActivityPage() {
                                   setValue("instrument_search", opt.symbol || opt.name || "");
                                   if (opt.currency) {
                                     setValue("currency_code", opt.currency);
-                                    setLockCurrency(true);
+                                    // setLockCurrency(true); // Don't lock
                                   }
                                   setIsSearchOpen(false);
                                 } else {
@@ -577,8 +577,8 @@ export default function NewActivityPage() {
                 label="Currency"
                 name="currency_code"
                 register={register}
-                disabled={lockCurrency}
-                options={currencies.map(c => ({ value: c.code!, label: c.code! }))}
+                disabled={false} // Allow override
+                options={Array.from(new Set([...currencies.map(c => c.code!), "GBp", "USD", "EUR", "GBP"])).sort().map(code => ({ value: code, label: code }))}
               />
             </div>
 

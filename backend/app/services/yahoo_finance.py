@@ -118,11 +118,7 @@ def search_symbols(query: str, include_indices: bool = False, limit: int = 10) -
     return unique[:limit]
 
 def get_quotes(symbols: List[str]) -> Dict[str, Dict]:
-    """
-    Latest price & currency. Ghostfolio tries quote() then falls back to quoteSummary().
-    We’ll do the same: call v7 in chunks of 50; for failures, use quoteSummary price.
-    Return {symbol: {marketPrice, currency, marketState}}
-    """
+
     out: Dict[str, Dict] = {}
     if not symbols: return out
 
