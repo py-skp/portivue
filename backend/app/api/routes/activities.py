@@ -10,6 +10,7 @@ from app.core.db import get_session
 from app.models.activities import Activity
 from app.models.broker import Broker
 from app.models.account import Account
+from app.models.instrument import Instrument
 from app.models.user import User
 from app.schemas.activities import ActivityCreate, ActivityReadWithCalc, ActivityUpdate
 from app.core.base_currency import get_base_currency_code
@@ -165,6 +166,14 @@ def create_activity(
                 status_code=422,
                 detail=f"Insufficient quantity to sell. Available: {available}",
             )
+
+    # If instrument is used, check if we need to sync currency (User requested override persistence)
+    if payload.instrument_id:
+        inst = session.get(Instrument, payload.instrument_id)
+        if inst and payload.currency_code and inst.currency_code != payload.currency_code:
+            # Auto-update instrument currency to match user's explicit choice
+            inst.currency_code = payload.currency_code
+            session.add(inst)
 
     act = Activity(**payload.model_dump(), owner_user_id=user.id)
     session.add(act)
