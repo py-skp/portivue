@@ -15,8 +15,9 @@ from sqlmodel import Session, select
 
 from app.core.db import engine
 from app.services.price_refresher import refresh_all_prices
-from app.services.fx_client import fetch_frank_latest, cross_to_base
+from app.services.fx_client import fetch_frank_latest, cross_to_base, fetch_oxr_latest
 from app.models.fx import FxRate
+from app.core.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -75,47 +76,127 @@ def job_refresh_prices():
 
 
 def job_refresh_fx_rates():
-    """Fetch Frankfurter latest EUR rates, cross to base, and upsert a small set."""
+    """Fetch latest FX rates. Priority: OXR (if key) -> Frankfurter (fallback)."""
     try:
         with SessionLocal() as s:
-            data = fetch_frank_latest()
-            if not data or "rates" not in data:
-                log.warning("Frankfurter latest: empty or error")
-                return
+            # 1. Try OXR if configured
+            if settings.oxr_app_id:
+                try:
+                    data = fetch_oxr_latest(settings.oxr_app_id)  # ranges: {"rates": {"EUR":...}, ...}
+                    # OXR is USD-based
+                    usd_rates = {k.upper(): float(v) for k, v in (data.get("rates") or {}).items()}
+                    usd_rates["USD"] = 1.0
+                    
+                    # Log source
+                    log.info("[fx] fetched from OXR (base USD)")
 
-            eur_rates = {k.upper(): float(v) for k, v in (data.get("rates") or {}).items()}
-            eur_rates["EUR"] = 1.0
+                    # We have USD rates directly.
+                    # Convert to desired base if needed, but our helper cross_to_base expects EUR rates?
+                    # No, cross_to_base is specific to EUR. We can implement a generic cross here.
+                    # Actually, if we have USD rates, and we want "base" rates:
+                    # rate(base->quote) = rate(base->USD) * rate(USD->quote)
+                    # rate(base->USD) = 1 / rate(USD->base)
+                    # So: rate(base->quote) = rate(USD->quote) / rate(USD->base)
+                    
+                    # Let's standardize on a map of {CODE: rate_per_USD} for the calculation below
+                    # OXR gives {CODE: rate_per_USD} (how many CODE per 1 USD)
+                    # e.g. EUR=0.9 -> 1 USD = 0.9 EUR
+                    
+                    rates_map_usd_base = usd_rates
+                    # If Frankfurter (fallback) is used later, we get EUR-base, so we'd convert. 
+                    
+                except Exception as e:
+                    log.warning("[fx] OXR configured but failed: %s. Falling back to Frankfurter.", e)
+                    rates_map_usd_base = None
+            else:
+                rates_map_usd_base = None
 
-            base = os.getenv("APP_BASE_CURRENCY", "USD").upper()
+            # 2. Fallback to Frankfurter
+            if not rates_map_usd_base:
+                data = fetch_frank_latest()
+                if not data or "rates" not in data:
+                    log.warning("Frankfurter latest: empty or error")
+                    return
+                
+                # Frankfurter gives EUR-based rates: {USD: 1.1, GBP: 0.85} per 1 EUR
+                eur_rates = {k.upper(): float(v) for k, v in (data.get("rates") or {}).items()}
+                eur_rates["EUR"] = 1.0
+
+                # Convert to USD-based map for consistent logic below
+                # rate(USD->X) = rate(EUR->X) / rate(EUR->USD)
+                rate_eur_usd = eur_rates.get("USD")
+                if not rate_eur_usd:
+                    log.error("Frankfurter missing USD rate, cannot normalize")
+                    return
+                
+                rates_map_usd_base = {}
+                for k, v in eur_rates.items():
+                    rates_map_usd_base[k] = v / rate_eur_usd
+                
+                log.info("[fx] fetched from Frankfurter (base EUR -> norm to USD)")
+
+            # 3. Upsert needed pairs
+            # We now have rates_map_usd_base: {CODE: rate_per_USD}
+            # Target: rate(BASE -> QUOTE) = rates_map_usd_base[QUOTE] / rates_map_usd_base[BASE]
+            
+            base_currency = os.getenv("APP_BASE_CURRENCY", "USD").upper()
             needed = set(
                 os.getenv("FX_NEEDED_CODES", "USD,GBP,EUR,AED,PKR,INR")
                 .upper()
                 .split(",")
             )
 
-            usd_rates = cross_to_base(base, eur_rates)  # -> {quote: rate}
-
             from datetime import date as Date
-            as_of = Date.fromisoformat(data["date"])
+            # OXR timestamp vs Frankfurter date
+            # OXR: "timestamp": 123
+            # Frank: "date": "2025-..."
+            # We'll valid_date = today or from payload. 
+            # For simplicity, use UTC today as "as_of" for latest refresh
+            as_of = datetime.now(dt_tz.utc).date()
 
             inserts = 0
-            for q, r in usd_rates.items():
-                if q == base or q not in needed:
+            for q in needed:
+                if q not in rates_map_usd_base:
+                    continue
+                
+                # We want pairs like USD->GBP, GBP->USD, USD->EUR, etc.
+                # Usually we want specific BASE -> QUOTE. 
+                # The code originally only did BASE -> QUOTE for the defined 'needed' set? 
+                # Original logic: cross_to_base(base, eur_rates) -> {quote: rate} where rate is 1 BASE = ? QUOTE
+                
+                # emulate cross_to_base logic:
+                # rate(BASE -> q)
+                val_q = rates_map_usd_base.get(q)
+                val_base = rates_map_usd_base.get(base_currency)
+                
+                if not val_q or not val_base:
+                    continue
+                    
+                # 1 BASE = (val_q / val_base) QUOTE
+                rate_val = val_q / val_base
+
+                # Upsert BASE -> q
+                if q == base_currency:
                     continue
 
                 exists = s.exec(
                     select(FxRate.id)
-                    .where(FxRate.base == base)
+                    .where(FxRate.base == base_currency)
                     .where(FxRate.quote == q)
                     .where(FxRate.as_of_date == as_of)
                     .limit(1)
                 ).first()
+                
                 if exists:
+                    # Update? Original code didn't update "if exists: continue"
+                    # We'll stick to skip if exists to avoid churn, or update? 
+                    # If it's "latest", we might want to update.
+                    # Original: "if exists: continue"
                     continue
 
-                rate = FxRate(base=base, quote=q, as_of_date=as_of, rate=round(float(r), 8))
+                rate_obj = FxRate(base=base_currency, quote=q, as_of_date=as_of, rate=round(float(rate_val), 8))
                 with suppress(Exception):
-                    s.add(rate)
+                    s.add(rate_obj)
                     inserts += 1
 
             try:
@@ -125,11 +206,13 @@ def job_refresh_fx_rates():
                 s.rollback()
                 log.exception("FX commit failed")
             else:
-                log.info("FX upserted %s rows for %s", inserts, as_of)
+                if inserts:
+                    log.info("FX upserted %s rows for %s", inserts, as_of)
     except Exception:
         log.exception("[fx] refresh failed")
     finally:
         LAST_RUN["fx"] = datetime.now(dt_tz.utc).isoformat()
+
 
 
 # ---- Scheduler bootstrap -----------------------------------------------------

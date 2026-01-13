@@ -18,3 +18,14 @@ def cross_to_base(base: str, eur_rates: Dict[str, float]) -> Dict[str, float]:
     out = {k: v / b for k, v in eur_rates.items() if k != base}
     out["EUR"] = 1.0 / b
     return out
+
+
+def fetch_oxr_latest(app_id: str) -> dict:
+    """
+    Fetch latest rates from Open Exchange Rates (USD base).
+    Returns dict like: {"timestamp": 123456789, "base": "USD", "rates": {"EUR": 0.9, ...}}
+    """
+    url = f"https://openexchangerates.org/api/latest.json?app_id={app_id}"
+    r = httpx.get(url, timeout=15)
+    r.raise_for_status()
+    return r.json()
