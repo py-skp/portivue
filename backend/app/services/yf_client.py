@@ -116,9 +116,8 @@ def fetch_profile_and_price(symbol: str, is_crypto: bool = False) -> Optional[Di
             last     = p.get("regularMarketPrice") or q.get("regularMarketPrice")
             last_ts  = p.get("regularMarketTime")  or q.get("regularMarketTime")
 
-            # ---- LSE norm: GBX → GBp; .L listings → GBp
-            ys_upper = (ys or "").upper()
-            if ys_upper.endswith(".L") or currency == "GBX":
+            # ---- LSE norm: GBX → GBp (Post-Brexit/standardization)
+            if currency == "GBX":
                 currency = "GBp"
             # ----------------------------------------
 
